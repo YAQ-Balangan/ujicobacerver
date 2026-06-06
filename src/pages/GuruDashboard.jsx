@@ -52,9 +52,15 @@ import {
 } from "lucide-react";
 import { api } from "../api/api";
 import Dashboard from "../components/layout/Dashboard";
-import { Card, Badge } from "../components/ui/Ui";
+import { Card, Badge, PremiumSelect, PremiumMultiSelect } from "../components/ui/Ui";
 import { AuthContext } from "../context/AuthContext";
 import SSmode from "../components/modals/SSmode";
+
+// === IMPORT FILE MODAL YANG BARU DIBUAT ===
+import ModalSoalManual from "../components/modals/ModalSoalManual";
+import ModalImportMassal from "../components/modals/ModalImportMassal";
+import ModalTemplateDummy from "../components/modals/ModalTemplateDummy";
+
 import "katex/dist/katex.min.css";
 import renderMathInElement from "katex/contrib/auto-render";
 
@@ -74,11 +80,9 @@ import {
 } from "docx";
 import { saveAs } from "file-saver";
 
-// Tambahan: Menggunakan React.memo agar performa lebih ringan
 const Latex = React.memo(({ children }) => {
   const containerRef = useRef(null);
 
-  // Perubahan Utama: useLayoutEffect
   useLayoutEffect(() => {
     if (containerRef.current) {
       renderMathInElement(containerRef.current, {
@@ -89,7 +93,7 @@ const Latex = React.memo(({ children }) => {
         throwOnError: false,
       });
     }
-  }, [children]); // Hanya satu dependency untuk mount & update
+  }, [children]);
 
   return (
     <span
@@ -109,334 +113,6 @@ const formatPoinDisplay = (val) => {
     return "2.5";
   }
   return str;
-};
-
-// ==========================================
-// KOMPONEN PREMIUM CUSTOM DROPDOWN
-// ==========================================
-const PremiumSelect = ({
-  value,
-  onChange,
-  options,
-  placeholder,
-  disabled,
-  icon,
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const dropdownRef = useRef(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
-        setSearch("");
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const filteredOptions = options.filter((opt) =>
-    opt.label.toLowerCase().includes(search.toLowerCase()),
-  );
-  const selectedOption = options.find(
-    (opt) => String(opt.value) === String(value),
-  );
-
-  return (
-    <div className="relative w-full" ref={dropdownRef}>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setIsOpen(!isOpen)}
-        className={`w-full flex items-center justify-between p-2.5 md:p-3.5 text-sm bg-white border transition-all rounded-lg md:rounded-xl outline-none shadow-sm min-h-[40px] md:min-h-[48px] ${disabled ? "bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed" : "border-slate-200 text-slate-800 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 hover:border-emerald-400 cursor-pointer"}`}
-      >
-        <span
-          className={`flex items-center gap-2 line-clamp-2 text-left break-words ${!selectedOption ? "text-slate-400 font-medium" : "font-bold"}`}
-        >
-          {icon && <span className="text-emerald-600 shrink-0">{icon}</span>}
-          {selectedOption ? selectedOption.label : placeholder}
-        </span>
-        <ChevronDown
-          size={16}
-          className={`text-slate-400 shrink-0 ml-2 transition-transform duration-300 ${isOpen ? "rotate-180 text-emerald-600" : ""}`}
-        />
-      </button>
-
-      {isOpen && (
-        <div className="absolute z-50 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-hidden flex flex-col">
-          <div className="p-2 border-b border-slate-100">
-            <input
-              type="text"
-              autoFocus
-              placeholder="Cari..."
-              className="w-full px-3 py-2 text-sm bg-slate-50 rounded-lg outline-none border border-slate-200 focus:border-emerald-500"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-            />
-          </div>
-          <div className="overflow-y-auto max-h-48 py-1">
-            {filteredOptions.length > 0 ? (
-              filteredOptions.map((opt, index) => {
-                const isSelected = String(opt.value) === String(value);
-                return (
-                  <button
-                    key={index}
-                    type="button"
-                    onClick={() => {
-                      onChange(opt.value);
-                      setIsOpen(false);
-                      setSearch("");
-                    }}
-                    className={`w-full flex items-center justify-between px-3 md:px-4 py-2.5 text-sm transition-colors text-left ${isSelected ? "bg-emerald-50 text-emerald-800 font-bold" : "text-slate-600 hover:bg-slate-50 hover:text-emerald-700 font-medium"}`}
-                  >
-                    <span className="whitespace-normal break-words pr-2">
-                      {opt.label}
-                    </span>
-                    {isSelected && (
-                      <Check
-                        size={16}
-                        className="text-emerald-600 shrink-0 ml-2"
-                      />
-                    )}
-                  </button>
-                );
-              })
-            ) : (
-              <div className="px-4 py-3 text-sm text-slate-400 italic">
-                Opsi tidak ditemukan
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ==========================================
-// KOMPONEN PREMIUM MULTI-SELECT CHECKBOX
-// ==========================================
-const PremiumMultiSelect = ({
-  value,
-  onChange,
-  options,
-  placeholder,
-  disabled,
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const dropdownRef = useRef(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
-        setSearch("");
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const filteredOptions = options.filter((opt) =>
-    opt.label.toLowerCase().includes(search.toLowerCase()),
-  );
-  const selectedArray = value
-    ? String(value)
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : [];
-
-  const toggleOption = (optValue) => {
-    let newArr = [...selectedArray];
-    if (newArr.includes(optValue)) {
-      newArr = newArr.filter((i) => i !== optValue);
-    } else {
-      newArr.push(optValue);
-    }
-    onChange(newArr.join(", "));
-  };
-
-  return (
-    <div className="relative w-full" ref={dropdownRef}>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setIsOpen(!isOpen)}
-        className={`w-full flex items-center justify-between p-2.5 md:p-3.5 text-sm bg-white border transition-all rounded-lg md:rounded-xl outline-none shadow-sm min-h-[40px] md:min-h-[48px] ${disabled ? "bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed" : "border-slate-200 text-slate-800 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 hover:border-emerald-400 cursor-pointer"}`}
-      >
-        <span
-          className={`line-clamp-2 text-left break-words pr-2 ${selectedArray.length === 0 ? "text-slate-400 font-medium" : "font-bold"}`}
-        >
-          {selectedArray.length === 0
-            ? placeholder
-            : selectedArray.length > 2
-              ? `${selectedArray.length} Kelas Dipilih`
-              : selectedArray.join(", ")}
-        </span>
-        <ChevronDown
-          size={16}
-          className={`text-slate-400 shrink-0 transition-transform duration-300 ${isOpen ? "rotate-180 text-emerald-600" : ""}`}
-        />
-      </button>
-
-      {isOpen && (
-        <div className="absolute z-50 w-full md:w-80 mt-2 bg-white border border-slate-100 rounded-xl shadow-2xl flex flex-col max-h-72 overflow-hidden max-w-[90vw]">
-          <div className="p-2 border-b border-slate-100 bg-slate-50 sticky top-0 flex flex-col gap-2 z-10">
-            <div className="flex justify-between items-center px-1">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                Pilih Sasaran
-              </span>
-              {selectedArray.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => onChange("")}
-                  className="text-[10px] font-bold text-red-500 hover:bg-red-50 px-2 py-0.5 rounded-lg"
-                >
-                  Reset
-                </button>
-              )}
-            </div>
-            <input
-              type="text"
-              autoFocus
-              placeholder="Cari kelas..."
-              className="w-full px-3 py-1.5 text-xs bg-white rounded-lg outline-none border border-slate-200"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-            />
-          </div>
-
-          <div className="overflow-y-auto p-2 scrollbar-thin flex flex-col gap-1">
-            {filteredOptions.length > 0 ? (
-              filteredOptions.map((opt, index) => {
-                if (opt.isLabel)
-                  return (
-                    <div
-                      key={index}
-                      className="px-3 pt-2 pb-1 text-[10px] font-black text-emerald-700 uppercase tracking-widest sticky top-0 bg-white"
-                    >
-                      {opt.label}
-                    </div>
-                  );
-                const isSelected = selectedArray.includes(opt.value);
-                return (
-                  <div
-                    key={index}
-                    onClick={() => toggleOption(opt.value)}
-                    className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all ${isSelected ? "bg-emerald-50 text-emerald-700 font-bold" : "hover:bg-slate-50 text-slate-600 font-medium"}`}
-                  >
-                    {isSelected ? (
-                      <CheckSquare
-                        size={16}
-                        className="text-emerald-500 shrink-0"
-                      />
-                    ) : (
-                      <Square size={16} className="text-slate-300 shrink-0" />
-                    )}
-                    <span className="text-xs md:text-sm whitespace-normal break-words leading-tight">
-                      {opt.label}
-                    </span>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="p-4 text-xs text-slate-400 italic">
-                Kelas tidak ditemukan
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ==========================================
-// KOMPONEN EDITOR GOOGLE FORM STYLE (BARU)
-// ==========================================
-const GoogleFormEditor = ({
-  value,
-  onChange,
-  placeholder,
-  disabled,
-  onImageUpload,
-}) => {
-  const editorRef = useRef(null);
-
-  useEffect(() => {
-    if (editorRef.current && value !== editorRef.current.innerHTML) {
-      editorRef.current.innerHTML = value || "";
-    }
-  }, []);
-
-  const handleInput = () => {
-    if (editorRef.current) onChange(editorRef.current.innerHTML);
-  };
-  const execCmd = (cmd, e) => {
-    e.preventDefault();
-    document.execCommand(cmd, false, null);
-    handleInput();
-  };
-
-  return (
-    <div
-      className={`border rounded-xl md:rounded-[1.5rem] bg-white overflow-hidden shadow-sm focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all ${disabled ? "opacity-60 cursor-not-allowed" : ""}`}
-    >
-      <div className="flex flex-wrap gap-1 md:gap-2 p-2 bg-slate-50 border-b border-slate-200">
-        <button
-          type="button"
-          onMouseDown={(e) => execCmd("bold", e)}
-          className="p-1.5 md:p-2 hover:bg-slate-200 rounded text-slate-700 font-bold"
-          title="Bold"
-        >
-          B
-        </button>
-        <button
-          type="button"
-          onMouseDown={(e) => execCmd("italic", e)}
-          className="p-1.5 md:p-2 hover:bg-slate-200 rounded text-slate-700 italic font-serif"
-          title="Italic"
-        >
-          I
-        </button>
-        <button
-          type="button"
-          onMouseDown={(e) => execCmd("underline", e)}
-          className="p-1.5 md:p-2 hover:bg-slate-200 rounded text-slate-700 underline"
-          title="Underline"
-        >
-          U
-        </button>
-        <div className="w-px bg-slate-300 mx-1"></div>
-        {onImageUpload && (
-          <label className="cursor-pointer p-1.5 md:p-2 hover:bg-slate-200 rounded text-emerald-600 flex items-center gap-2 text-xs font-bold transition-colors">
-            <ImagePlus size={16} /> Sisipkan Foto
-            <input
-              type="file"
-              className="hidden"
-              accept="image/*"
-              disabled={disabled}
-              onChange={onImageUpload}
-            />
-          </label>
-        )}
-      </div>
-      <div
-        ref={editorRef}
-        contentEditable={!disabled}
-        onInput={handleInput}
-        onBlur={handleInput}
-        className="p-3 md:p-4 min-h-[100px] text-sm md:text-base text-slate-800 outline-none whitespace-pre-wrap empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 cursor-text"
-        data-placeholder={placeholder}
-      />
-    </div>
-  );
 };
 
 // ==========================================
@@ -701,7 +377,6 @@ const MemoizedSoalCard = React.memo(
     );
   },
   (prevProps, nextProps) => {
-    // MAGIC MEMOIZATION: Jangan render ulang kecuali hal-hal ini berubah!
     return (
       prevProps.s === nextProps.s &&
       prevProps.isSelected === nextProps.isSelected &&
@@ -721,7 +396,6 @@ const GuruDashboard = () => {
   const [folderSearch, setFolderSearch] = useState("");
   const [groupBy, setGroupBy] = useState("mapel");
 
-  // 1. STATE CACHE GLOBAL (Sama seperti Admin Dashboard)
   const [allData, setAllData] = useState({
     soal: [],
     nilai: [],
@@ -731,8 +405,6 @@ const GuruDashboard = () => {
   const currentConfig = TAB_CONFIG[tab];
   const data = allData[tab] || [];
 
-  // ALIAS PENGHINDAR ERROR:
-  // Agar ratusan baris fungsi hapus/simpan lama Anda tetap bekerja sempurna tanpa perlu dimodifikasi
   const setData = (updater) => {
     setAllData((prev) => {
       const currentTabData = prev[tab] || [];
@@ -742,13 +414,11 @@ const GuruDashboard = () => {
     });
   };
 
-  const [sesiUjianData, setSesiUjianData] = useState([]); // State untuk Anti-Curang
+  const [sesiUjianData, setSesiUjianData] = useState([]); 
 
-  // STATE & API GAMBAR
   const IMGBB_API_KEY = "db28c000ce57b260d7d09cb4c18790e0";
   const [uploadingImgId, setUploadingImgId] = useState(null);
 
-  // LOGIKA UNDO / REDO
   const [actionHistory, setActionHistory] = useState({ undo: [], redo: [] });
   const [isDoingHistory, setIsDoingHistory] = useState(false);
 
@@ -782,7 +452,6 @@ const GuruDashboard = () => {
   const [isBulkOpen, setIsBulkOpen] = useState(false);
   const [isSSModeOpen, setIsSSModeOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");
-  const [isReadingFile, setIsReadingFile] = useState(false);
   const [isProcessingAI, setIsProcessingAI] = useState(false);
   const [parsedBulkData, setParsedBulkData] = useState([]);
   const [bulkMapel, setBulkMapel] = useState("");
@@ -790,7 +459,6 @@ const GuruDashboard = () => {
   const [bulkPoin, setBulkPoin] = useState("2");
   const [bulkProgress, setBulkProgress] = useState(0);
 
-  // --- STATE BARU: DUMMY & AI DETECTOR ---
   const [isDummyModalOpen, setIsDummyModalOpen] = useState(false);
   const [dummyConfig, setDummyConfig] = useState({
     jumlah: 40,
@@ -800,7 +468,6 @@ const GuruDashboard = () => {
   });
   const [isUploadingFormImg, setIsUploadingFormImg] = useState(false);
 
-  // VIEW MODE: "rekap" | "log" | "pelanggaran"
   const [nilaiViewMode, setNilaiViewMode] = useState("rekap");
 
   const showAlert = (type, title, message, onConfirm = null) => {
@@ -808,7 +475,6 @@ const GuruDashboard = () => {
   };
   const closeAlert = () => setCustomAlert({ ...customAlert, isOpen: false });
 
-  // --- REKAM JEJAK SEJARAH (UNDO/REDO LOGGER) ---
   const pushAction = (action) => {
     setActionHistory((prev) => ({ undo: [...prev.undo, action], redo: [] }));
   };
@@ -909,7 +575,6 @@ const GuruDashboard = () => {
     }
   };
 
-  // --- FUNGSI BARU: GENERATE SOAL DUMMY ---
   const handleGenerateDummy = async (e) => {
     e.preventDefault();
     if (!dummyConfig.mapel || !dummyConfig.kelas)
@@ -936,10 +601,7 @@ const GuruDashboard = () => {
         });
       }
 
-      // SIMPAN MASSAL DALAM 1 DETIK!
       const resData = await api.createBulk(currentConfig.sheet, dummyItems);
-
-      // Masukkan ke log sejarah Undo agar aman
       pushAction({ type: "BULK_CREATE", items: resData });
 
       await fetchData(false);
@@ -956,7 +618,6 @@ const GuruDashboard = () => {
     }
   };
 
-  // --- FUNGSI BARU: UPLOAD GAMBAR DI MODAL ---
   const handleFormImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -988,7 +649,6 @@ const GuruDashboard = () => {
     }
   };
 
-  // 2. TARIK SEMUA TAB SEKALIGUS SAAT LOGIN
   const fetchAllData = async (isBackground = false) => {
     if (!isBackground) setLoading(true);
     if (isBackground) setIsSyncing(true);
@@ -1020,8 +680,6 @@ const GuruDashboard = () => {
     }
   };
 
-  // ALIAS FETCH: Jika ada aksi yang memaksa refresh (seperti hapus/simpan),
-  // kita hanya refresh tab yang sedang aktif saja agar ringan.
   const fetchData = async (isBackground = false) => {
     if (!currentConfig) return;
     if (!isBackground) setLoading(true);
@@ -1041,7 +699,6 @@ const GuruDashboard = () => {
     }
   };
 
-  // --- FUNGSI BARU: HANYA MENARIK NILAI & SESI (HEMAT KUOTA) ---
   const fetchLiveMonitoring = async () => {
     setIsSyncing(true);
     try {
@@ -1052,7 +709,7 @@ const GuruDashboard = () => {
 
       setAllData((prev) => {
         const newData = {
-          ...prev, // Pertahankan data soal yang sudah ada di memori
+          ...prev, 
           nilai: resNilai || [],
         };
         return JSON.stringify(prev) !== JSON.stringify(newData)
@@ -1067,11 +724,9 @@ const GuruDashboard = () => {
     }
   };
 
-  // A. HANYA JALANKAN FETCH ALL SAAT PERTAMA KALI MASUK APLIKASI
   useEffect(() => {
     fetchAllData(false);
 
-    // Ambil angka total soal dari Supabase
     const fetchCount = async () => {
       const total = await api.getTotalSoal();
       setIndikatorTotalSoal(total);
@@ -1086,8 +741,6 @@ const GuruDashboard = () => {
     return () => clearInterval(intervalId);
   }, []);
 
-  // B. SAAT PINDAH TAB/MENU: Langsung instan!
-  // Tidak ada proses fetch ulang, cukup reset kolom pencarian saja.
   useEffect(() => {
     setSearch("");
     setFilters({});
@@ -1095,9 +748,6 @@ const GuruDashboard = () => {
     fetchMapelList();
   }, [tab]);
 
-  // ==============================================================
-  // UX LUAR: UPLOAD GAMBAR LANGSUNG PADA KARTU SOAL
-  // ==============================================================
   const handleInlineImageUpload = async (e, item) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1152,7 +802,7 @@ const GuruDashboard = () => {
       showAlert("danger", "Upload Gagal", err.message);
     } finally {
       setUploadingImgId(null);
-      e.target.value = null; // Reset file input
+      e.target.value = null;
     }
   };
 
@@ -1343,13 +993,10 @@ const GuruDashboard = () => {
     }
   };
 
-  // LOGIKA Anti-Curang: GURU BUKA KUNCI
   const handleUnlockSesi = async (username, examId) => {
     try {
       setLoading(true);
-      // Panggil API (status jadi ACTIVE, pelanggaran biarkan 1 agar tidak curang lagi)
       await api.updateSesiStatus(username, examId, "ACTIVE", 1);
-
       showAlert(
         "success",
         "Akses Dibuka",
@@ -1401,19 +1048,14 @@ const GuruDashboard = () => {
     if (!bulkText.trim())
       return showAlert("warning", "Validasi", "Teks soal masih kosong.");
 
-    // ==========================================
-    // AUTO-DETECT MODE SOAL DI BELAKANG LAYAR
-    // ==========================================
     const textLower = bulkText.toLowerCase();
     let detectedMode = "umum";
 
-    // Deteksi Eksakta: Mengandung simbol matematika, fisika, kimia, atau deret angka+simbol operasi
     const isEksakta =
       /√|\^|∑|∫|lim|sin|cos|tan|log|kuadrat|m\/s|joule|watt|newton|co2|h2o/i.test(
         textLower,
       ) || /[\+\-\*\/\=\(\)\d]{6,}/.test(textLower);
 
-    // Deteksi Bahasa: Mengandung instruksi bacaan, kutipan, cerita, atau puisi
     const isBahasa =
       /bacalah teks|cermatilah|kutipan|wacana|paragraf|gagasan utama|sinonim|antonim|puisi|berikut|/i.test(
         textLower,
@@ -1422,51 +1064,36 @@ const GuruDashboard = () => {
     if (isEksakta) detectedMode = "eksakta";
     else if (isBahasa) detectedMode = "bahasa";
 
-    // CATATAN UNTUK BACKEND:
-    // Variabel 'detectedMode' ini sekarang menyimpan "eksakta", "bahasa", atau "umum" secara dinamis.
-    // Jika Anda menggunakan API LLM (seperti OpenAI/Gemini), Anda bisa menyisipkan variabel ini ke dalam Prompt agar AI menyesuaikan gayanya.
     console.log(
       "🤖 Sistem Auto-Detect mengenali ini sebagai soal:",
       detectedMode.toUpperCase(),
     );
 
-    // ==========================================
-    // 1. LOGIKA PEMISAH SOAL CERDAS (STATE MACHINE V6 - AI BACKTRACKING)
-    // Anti-Ngeyel: Tahan dari ketidakhadiran tombol Enter!
-    // ==========================================
     const lines = bulkText.split("\n");
     const rawBlocks = [];
     let currentBlock = [];
-    let phase = "q"; // 'q' = wacana/soal, 'o' = opsi, 'k' = kunci, 'split_ready' = siap dipotong
-    let optionsSeen = new Set(); // Mengingat opsi apa saja yang sudah dibaca di soal ini
+    let phase = "q"; 
+    let optionsSeen = new Set(); 
 
     for (let i = 0; i < lines.length; i++) {
       let line = lines[i];
       let lineTrimmed = line.trim();
 
-      // Jika ada enter/baris kosong, tandai sistem bersiap untuk memotong
       if (!lineTrimmed) {
         if (phase === "o" || phase === "k") phase = "split_ready";
         continue;
       }
 
-      // Deteksi Baris Opsi
       let optMatch = lineTrimmed.match(/^\s*\*?([a-eA-E])\*?(?:[\.\)]|\s+)/);
       let isOpt = !!optMatch;
       let optLetter = isOpt ? optMatch[1].toLowerCase() : null;
 
-      // ==========================================
-      // DETEKSI MUNDUR (BACKTRACKING) - JURUS PAMUNGKAS
-      // Jika kita ketemu opsi 'A' lagi, padahal sebelumnya sudah lewat opsi B/C/D...
-      // ==========================================
       if (
         isOpt &&
         optLetter === "a" &&
         (optionsSeen.has("b") || optionsSeen.has("c") || optionsSeen.has("d"))
       ) {
         let poppedLines = [];
-
-        // Tarik mundur baris-baris terakhir yang bukan opsi (mengamankan teks pertanyaan baru yang menabrak)
         while (currentBlock.length > 0) {
           let lastLine = currentBlock[currentBlock.length - 1];
           let isLastOpt = /^\s*\*?[a-eA-E]\*?(?:[\.\)]|\s+)/.test(lastLine);
@@ -1475,16 +1102,14 @@ const GuruDashboard = () => {
           if (!isLastOpt && !isLastKunci) {
             poppedLines.unshift(currentBlock.pop());
           } else {
-            break; // Stop narik mundur kalau sudah ketemu opsi D dari soal sebelumnya
+            break; 
           }
         }
 
-        // Simpan soal sebelumnya yang sudah bersih
         if (currentBlock.length > 0) {
           rawBlocks.push(currentBlock.join("\n"));
         }
 
-        // Buka lembaran soal baru dengan teks yang ditarik tadi
         currentBlock = poppedLines;
         optionsSeen = new Set();
         phase = "q";
@@ -1497,15 +1122,11 @@ const GuruDashboard = () => {
           lineTrimmed,
         );
 
-      // Kapan kita memotong (split) blok normal?
       if (currentBlock.length > 0) {
         let shouldSplit = false;
 
-        // Aturan standar: ada enter pemisah
         if (phase === "split_ready" && !isOpt && !isKunci) shouldSplit = true;
-        // Aturan kunci sudah terlewati
         else if (phase === "k" && !isKunci) shouldSplit = true;
-        // Aturan tabrak langsung dengan angka (2.) atau kosa kata perintah
         else if (phase === "o" && (isNumbered || isWacanaMarker) && !isOpt)
           shouldSplit = true;
 
@@ -1517,10 +1138,9 @@ const GuruDashboard = () => {
         }
       }
 
-      // Update status fase pembacaan saat ini
       if (isOpt) {
         phase = "o";
-        optionsSeen.add(optLetter); // Catat huruf opsinya
+        optionsSeen.add(optLetter);
       } else if (isKunci) {
         phase = "k";
       } else if (phase === "split_ready") {
@@ -1530,12 +1150,8 @@ const GuruDashboard = () => {
       currentBlock.push(lineTrimmed);
     }
 
-    // Jangan lupa masukkan sisa blok terakhir
     if (currentBlock.length > 0) rawBlocks.push(currentBlock.join("\n"));
 
-    // ==========================================
-    // 2. LOGIKA EKSTRAKSI & COUNTDOWN WACANA
-    // ==========================================
     const parsed = [];
     let currentId =
       data.length > 0
@@ -1551,7 +1167,6 @@ const GuruDashboard = () => {
 
       currentId += 1;
 
-      // Ekstrak Format "Kunci: A"
       let kunci = "A";
       const matchKunciBawah = rawText.match(
         /\n\s*(?:Jawaban|Kunci)\s*:\s*([A-E])/i,
@@ -1561,22 +1176,14 @@ const GuruDashboard = () => {
         rawText = rawText.replace(/\n\s*(?:Jawaban|Kunci)\s*:\s*([A-E])/i, "");
       }
 
-      // Hapus nomor soal di awal
       rawText = rawText.replace(/^\s*\d+[\.\)]\s*/, "");
 
-      // ==========================================
-      // JURUS ANTI-KOLOM: Normalisasi opsi menyamping!
-      // Jika guru pakai spasi/tab untuk opsi C di sebelah A, kita paksa turun (Enter).
-      // Contoh: "A. Burung   C. Penyu" -> Menjadi "A. Burung \n C. Penyu"
-      // ==========================================
       rawText = rawText.replace(
         /([ \t]+)(\*?[a-eA-E]\*?[\.\)])(?=\s)/g,
         "\n$2",
       );
 
-      // Ekstrak Opsi & Format Bintang (*) - AI LEBIH CERDAS V7 (Tahan Acak)
       const extractOption = (letter) => {
-        // AI sekarang akan BERHENTI mengambil teks jika ia menabrak huruf opsi APA SAJA (A, B, C, D, atau E), bukan cuma huruf selanjutnya.
         const stopRegex = `(?:\\n\\s*\\*?[a-eA-E]\\*?(?:[\\.\\)]|\\s+)|$)`;
 
         const regex = new RegExp(
@@ -1591,19 +1198,16 @@ const GuruDashboard = () => {
         let starAfter = match[2];
         let rawOptionText = match[3];
 
-        // Cek keberadaan bintang di posisi manapun (depan, tengah, belakang)
         let isKey =
           starBefore === "*" ||
           starAfter === "*" ||
           rawOptionText.includes("*");
 
-        // Bersihkan semua tanda bintang dari teks agar rapi
         let cleanText = rawOptionText.replace(/\*/g, "").trim();
 
         return { text: cleanText, isKey };
       };
 
-      // Panggil tanpa parameter nextLetter karena AI sekarang sudah mandiri
       const optA = extractOption("A");
       const optB = extractOption("B");
       const optC = extractOption("C");
@@ -1622,28 +1226,22 @@ const GuruDashboard = () => {
       let wacana = "";
       let pertanyaan = "";
 
-      // Regex Hitung Wacana yang Jauh Lebih Kuat (Menutup Celah 2)
       const hitungTargetWacana = (teks) => {
         let remaining = 1;
 
-        // 1. Deteksi Range (Contoh: "soal nomor 1-3" atau "pertanyaan 5 sampai 10")
-        // Menambahkan (?:soal|pertanyaan|butir) agar lebih universal
         const rangeMatch = teks.match(
           /(?:soal|pertanyaan|butir)\s+(?:nomor\s+)?(\d+)\s*(?:-|s\.?\/d\.?|sampai|s\/d)\s*(\d+)/i,
         );
 
-        // 2. Deteksi Dua Soal (Contoh: "pertanyaan nomor 1 dan 2")
         const andMatch = teks.match(
           /(?:soal|pertanyaan|butir)\s+(?:nomor\s+)?(\d+)\s+dan\s+(\d+)/i,
         );
 
-        // 3. Deteksi Jumlah Langsung (Contoh: "untuk menjawab 3 pertanyaan")
         const countMatch = teks.match(
           /untuk\s+(?:menjawab\s+)?(?:sebanyak\s+)?(\d+)\s+(?:soal|pertanyaan|butir)/i,
         );
 
         if (rangeMatch) {
-          // Menghitung selisih angka (misal 1-3 = 3 soal)
           remaining = Math.max(
             1,
             parseInt(rangeMatch[2]) - parseInt(rangeMatch[1]) + 1,
@@ -1697,13 +1295,11 @@ const GuruDashboard = () => {
       if (sisaJatahWacana > 0) sisaJatahWacana--;
 
       if (wacana) {
-        // Update Regex agar mendukung kata 'soal', 'pertanyaan', atau 'butir'
         wacana = wacana.replace(
           /(untuk\s+(?:menjawab\s+)?(?:soal|pertanyaan|butir)\s+(?:nomor\s+)?\d+\s*(?:-|s\.?\/d\.?|sampai|s\/d|dan)\s*\d+)/gi,
           "untuk menjawab soal di bawah ini",
         );
 
-        // Membersihkan variasi kalimat "Wacana untuk..."
         wacana = wacana.replace(
           /(?:wacana|teks)\s+untuk\s+(?:menjawab\s+)?\d+\s+(?:soal|pertanyaan|butir)\s+di\s+bawah\s+ini:?/gi,
           "",
@@ -1767,7 +1363,6 @@ const GuruDashboard = () => {
 
     setIsProcessingAI(true);
     try {
-      // 1. Kumpulkan 5 API Key + 1 Key utama sebagai cadangan
       const apiKeys = [
         import.meta.env.VITE_GEMINI_API_KEY_1,
         import.meta.env.VITE_GEMINI_API_KEY_2,
@@ -1816,7 +1411,6 @@ Patuhi aturan berikut secara ketat:
       let finalData = null;
       let lastErrorMessage = "";
 
-      // 2. Sistem Rotasi: Coba dari API ke-1 sampai ke-5 (dan cadangan)
       for (let i = 0; i < apiKeys.length; i++) {
         const currentApiKey = apiKeys[i];
         try {
@@ -1858,31 +1452,27 @@ Patuhi aturan berikut secara ketat:
             );
           }
 
-          // Jika sampai di baris ini, berarti API tersebut SUKSES!
           finalData = data;
           isSuccess = true;
           console.log(
             `[AI Fallback] Hore! Berhasil menggunakan API Key ke-${i + 1}`,
           );
-          break; // Stop mencari kunci lain
+          break; 
         } catch (loopError) {
           console.warn(
             `[AI Fallback] API Key ke-${i + 1} Limit/Gagal:`,
             loopError.message,
           );
           lastErrorMessage = loopError.message;
-          // Otomatis pindah ke putaran (API Key) berikutnya
         }
       }
 
-      // 3. Evaluasi Hasil Akhir (Jika ke-5 + 1 kunci gagal semua)
       if (!isSuccess || !finalData) {
         throw new Error(
           `Seluruh API Key sedang penuh/limit. Silakan tunggu beberapa menit lalu coba klik lagi. Error sistem: ${lastErrorMessage}`,
         );
       }
 
-      // 4. Sukses: Terapkan hasil ke textbox
       const teksRapi = finalData.candidates[0].content.parts[0].text;
       setBulkText(teksRapi);
       showAlert("success", "Sihir Berhasil!", "Soal telah dirapikan oleh AI!");
@@ -1900,23 +1490,20 @@ Patuhi aturan berikut secara ketat:
     setBulkProgress(100);
 
     try {
-      // 1. Siapkan semua soal sekaligus (tanpa ID)
       const itemsToInsert = parsedBulkData.map((item) => {
         const newItem = {
           ...item,
           poin: parseFloat(String(item.poin).replace(",", ".")) || 0,
         };
-        delete newItem.id; // Supabase yang akan bikin ID
+        delete newItem.id; 
         return newItem;
       });
 
-      // 2. SIMPAN MASSAL DALAM 1 DETIK!
       const savedItems = await api.createBulk(
         currentConfig.sheet,
         itemsToInsert,
       );
 
-      // 3. Simpan data yang SUDAH PUNYA ID ke dalam sejarah Undo
       pushAction({ type: "BULK_CREATE", items: savedItems });
 
       await fetchData(false);
@@ -1935,9 +1522,7 @@ Patuhi aturan berikut secara ketat:
       setBulkProgress(0);
     }
   };
-  // ==========================================
-  // LOGIKA PENGELOMPOKAN FOLDER (ANTI-LAG)
-  // ==========================================
+
   const folderSoal = useMemo(() => {
     if (tab !== "soal" || data.length === 0) return [];
     const groups = {};
@@ -1945,7 +1530,6 @@ Patuhi aturan berikut secara ketat:
       if (!item.mapel || !item.kelas) return;
       const kls = String(item.kelas).trim();
 
-      // Kunci pengelompokan dinamis (Berdasarkan Mapel ATAU Kelas)
       const key =
         groupBy === "mapel"
           ? `${item.mapel}___${kls}`
@@ -1957,7 +1541,6 @@ Patuhi aturan berikut secara ketat:
       groups[key].count += 1;
     });
 
-    // Filter hasil berdasarkan search bar
     let result = Object.values(groups);
     if (folderSearch) {
       const s = folderSearch.toLowerCase();
@@ -1968,7 +1551,6 @@ Patuhi aturan berikut secara ketat:
       );
     }
 
-    // Sorting otomatis sesuai pengelompokan
     return result.sort((a, b) => {
       if (groupBy === "mapel") {
         const mapelCmp = a.mapel.localeCompare(b.mapel);
@@ -2019,7 +1601,6 @@ Patuhi aturan berikut secara ketat:
     return result;
   }, [data, search, filters]);
 
-  // VARIABEL DATA Anti-Curang
   const lockedSessions = sesiUjianData.filter((s) => s.status === "LOCKED");
   const disqualifiedSessions = processedData.filter(
     (d) =>
@@ -2053,7 +1634,6 @@ Patuhi aturan berikut secara ketat:
         i > 0 && processedData[i - 1].wacana === s.wacana && s.wacana !== "";
       const isAwalWacana = s.wacana && !isWacanaSama;
 
-      // Temukan bagian ini di dalam fungsi renderBankSoal
       if (isAwalWacana) {
         let bundleCount = 1;
         for (let j = i + 1; j < processedData.length; j++) {
@@ -2066,10 +1646,9 @@ Patuhi aturan berikut secara ketat:
             className="mt-8 mb-2 w-full relative z-0"
           >
             <div className="p-4 md:p-8 bg-blue-50/80 border border-blue-200 rounded-[1.5rem] md:rounded-[2rem] relative shadow-sm">
-              <div className="absolute -top-3.5 left-6 bg-linear-to-r from-blue-600 to-blue-500 text-white px-3 md:px-4 py-1.5 rounded-lg text-[9px] md:text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 shadow-md border border-blue-400">
+              <div className="absolute -top-3.5 left-6 bg-gradient-to-r from-blue-600 to-blue-500 text-white px-3 md:px-4 py-1.5 rounded-lg text-[9px] md:text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 shadow-md border border-blue-400">
                 <BookOpen size={14} /> WACANA TERIKAT PADA {bundleCount} SOAL
               </div>
-              {/* PERBAIKAN: Bungkus dengan <Latex> */}
               <div className="font-medium text-slate-700 leading-relaxed text-sm md:text-base whitespace-pre-wrap mt-2">
                 <Latex>{s.wacana || ""}</Latex>
               </div>
@@ -2119,14 +1698,14 @@ Patuhi aturan berikut secara ketat:
         grouped[key] = { nama_siswa: row.nama_siswa, kelas: row.kelas };
       if (grouped[key][mapelKey] === undefined)
         grouped[key][mapelKey] = parseFloat(row.skor) || 0;
-    }); // 1. FILTER MAPEL TERLEBIH DAHULU SEBELUM MENGHITUNG RATA-RATA
+    }); 
 
     let filteredMapels = mapels;
     if (filters.mapel) {
       filteredMapels = mapels.filter(
         (m) => String(m).toLowerCase() === String(filters.mapel).toLowerCase(),
       );
-    } // 2. HITUNG RATA-RATA DINAMIS (Berdasarkan mapel yang sedang difilter)
+    } 
 
     const finalData = Object.values(grouped).map((student) => {
       let total = 0,
@@ -2139,7 +1718,7 @@ Patuhi aturan berikut secara ketat:
       });
       student.RataRata = count > 0 ? (total / count).toFixed(1) : 0;
       return student;
-    }); // 3. TERAPKAN PENCARIAN & FILTER KELAS KE DATA SISWA
+    }); 
 
     let filteredPivot = finalData;
     if (search)
@@ -2155,7 +1734,7 @@ Patuhi aturan berikut secara ketat:
       filteredPivot = filteredPivot.filter(
         (s) => s[filters.mapel] !== undefined,
       );
-    } // 4. URUTKAN SESUAI KELAS DAN NAMA
+    } 
 
     filteredPivot.sort((a, b) => {
       const classCmp = String(a.kelas).localeCompare(String(b.kelas));
@@ -2196,18 +1775,14 @@ Patuhi aturan berikut secara ketat:
   }, [pivotNilaiData, tab, nilaiViewMode]);
 
   const handleExport = async (type) => {
-    setIsExportMenuOpen(false); // Tutup modal jika terbuka
+    setIsExportMenuOpen(false); 
     let dataToExport = [];
     let mapelsToExport = [];
     let isLogMode = tab === "nilai" && nilaiViewMode === "log";
 
-    // ==========================================
-    // 1. LOGIKA PENAMAAN FILE DINAMIS (BARU)
-    // ==========================================
     const dateObj = new Date();
     const dateStr = `${dateObj.getDate()}-${dateObj.getMonth() + 1}-${dateObj.getFullYear()}`;
 
-    // Hilangkan spasi pada nama mapel & kelas untuk nama file yang rapi
     const mapelStr = filters.mapel
       ? filters.mapel.replace(/\s+/g, "_")
       : "SemuaMapel";
@@ -2216,12 +1791,8 @@ Patuhi aturan berikut secara ketat:
       : "SemuaKelas";
     const prefixName = isLogMode ? "LogUjian" : "RekapNilai";
 
-    // Hasil Akhir Contoh: RekapNilai_X_MIPA_1_Matematika_2-5-2026
     let fileName = `${prefixName}_${kelasStr}_${mapelStr}_${dateStr}`;
 
-    // ==========================================
-    // 2. KUMPULKAN DATA (Cerdas Mendeteksi Lokasi Tab)
-    // ==========================================
     if (tab === "nilai") {
       if (isLogMode) {
         if (processedData.length === 0)
@@ -2242,7 +1813,6 @@ Patuhi aturan berikut secara ketat:
         mapelsToExport = pivotNilaiData.mapels;
       }
     } else {
-      // JIKA DI TAB SOAL: Tarik data nilai secara diam-diam dari Backend
       showAlert(
         "info",
         "Sinkronisasi...",
@@ -2293,15 +1863,11 @@ Patuhi aturan berikut secara ketat:
       }
     }
 
-    // ==========================================
-    // 3. LOGIKA GENERATE PDF & PRINT (HTML Dibuat Manual)
-    // ==========================================
     if (type === "print" || type === "pdf") {
       const title = isLogMode
         ? "LOG RIWAYAT UJIAN SISWA"
         : "REKAPITULASI BUKU NILAI SISWA";
 
-      // Subtitle Print juga dibuat dinamis mengikuti filter!
       const subtitle = `Mapel: ${filters.mapel || "Semua"} | Kelas: ${filters.kelas || "Semua"} | Total Data: ${dataToExport.length} | Waktu Cetak: ${new Date().toLocaleString("id-ID")}`;
 
       let tableHtml = `<table border="1" style="width:100%; border-collapse: collapse; text-align: center; margin-top: 15px; font-size: 10pt;">`;
@@ -2328,7 +1894,6 @@ Patuhi aturan berikut secara ketat:
       }
       tableHtml += `</tbody></table>`;
 
-      // Menambahkan <title> dinamis pada dokumen HTML yang di-print/PDF
       const printContent = `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>${fileName}</title><style>@page { size: auto; margin: 15mm; } body { font-family: Arial, sans-serif; color: #000; } .header { text-align: center; margin-bottom: 20px; } .header h1 { margin:0 0 5px 0; font-size: 20pt; text-transform: uppercase; border-bottom: 2px solid #000; display: inline-block; padding-bottom: 5px; } .header p { margin:0; font-size: 11pt; color: #444; }</style></head><body><div class="header"><h1>${title}</h1><p>${subtitle}</p></div>${tableHtml}</body></html>`;
 
       let printIframe = document.getElementById("print-iframe-cerdas");
@@ -2343,7 +1908,6 @@ Patuhi aturan berikut secara ketat:
       printIframe.contentWindow.document.write(printContent);
       printIframe.contentWindow.document.close();
 
-      // Memberi nama pada title window iframe membantu beberapa browser menyimpan PDF dengan nama tersebut
       printIframe.contentWindow.document.title = fileName;
 
       printIframe.contentWindow.focus();
@@ -2351,9 +1915,6 @@ Patuhi aturan berikut secara ketat:
       return;
     }
 
-    // ==========================================
-    // 4. LOGIKA GENERATE EXCEL & WORD
-    // ==========================================
     let exportHeaders = [];
     let exportDataMatrix = [];
     let wscols = [];
@@ -2403,7 +1964,6 @@ Patuhi aturan berikut secara ketat:
         isLogMode ? "Log Ujian" : "Rekap Nilai",
       );
 
-      // Simpan dengan nama dinamis (.xlsx)
       XLSX.writeFile(workbook, `${fileName}.xlsx`);
     } else if (type === "doc") {
       try {
@@ -2472,7 +2032,6 @@ Patuhi aturan berikut secara ketat:
                   alignment: AlignmentType.CENTER,
                   spacing: { after: 400 },
                 }),
-                // Tambahkan keterangan filter di file word agar rapi
                 new Paragraph({
                   children: [
                     new TextRun({
@@ -2490,7 +2049,6 @@ Patuhi aturan berikut secara ketat:
         });
         const blob = await Packer.toBlob(doc);
 
-        // Simpan dengan nama dinamis (.docx)
         saveAs(blob, `${fileName}.docx`);
       } catch (error) {
         showAlert(
@@ -2509,10 +2067,6 @@ Patuhi aturan berikut secara ketat:
   return (
     <Dashboard menu={MENU_ITEMS} active={tab} setActive={setTab}>
       <div className="space-y-6 max-w-7xl mx-auto pb-24 relative">
-        {/* CSS animasi background dihapus agar ringan */}
-        {/* ============================================================== */}
-        {/* BANNER PERINGATAN GLOBAL (Jika Ada Siswa Terkunci - ANTI CHEAT) */}
-        {/* ============================================================== */}
         {lockedSessions.length > 0 && (
           <div className="fixed bottom-4 md:bottom-8 right-4 md:right-8 z-[45] max-w-[calc(100vw-2rem)] md:max-w-sm">
             <div className="bg-gradient-to-r from-red-600 to-red-500 text-white p-3 md:p-4 rounded-[1.5rem] shadow-2xl shadow-red-500/30 flex items-center gap-3 md:gap-4 border border-red-400">
@@ -2540,11 +2094,8 @@ Patuhi aturan berikut secara ketat:
             </div>
           </div>
         )}
-        {/* ============================================================== */}
-        {/* TAMPILAN M-BANKING (KHUSUS HP) - SAT SET SAT SET */}
-        {/* ============================================================== */}
+
         <div className="md:hidden space-y-4 mb-2">
-          {/* 1. Kartu Identitas & Saldo */}
           <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-3xl p-5 text-white shadow-lg shadow-emerald-600/30 relative overflow-hidden">
             <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
             <div className="flex justify-between items-center relative z-10 mb-6">
@@ -2594,7 +2145,6 @@ Patuhi aturan berikut secara ketat:
             </div>
           </div>
 
-          {/* 2. Grid Menu M-Banking (Tombol Besar) */}
           <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
             <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">
               Menu
@@ -2746,7 +2296,6 @@ Patuhi aturan berikut secara ketat:
                 </span>
               </button>
 
-              {/* TOMBOL SMART EXPORT YANG BARU */}
               <button
                 onClick={() => setIsExportMenuOpen(true)}
                 className="flex flex-col items-center gap-2 active:scale-95 transition-transform"
@@ -2779,9 +2328,7 @@ Patuhi aturan berikut secara ketat:
             </div>
           </div>
 
-          {/* 3. Bar Pencarian Pintas HP Mobile Smart */}
           <div className="space-y-3">
-            {/* Baris 1: Pencarian & Tombol Filter (Gaya E-Commerce) */}
             <div className="flex gap-2">
               <div className="flex-1 bg-white rounded-2xl p-2.5 shadow-sm border border-slate-100 flex items-center gap-2">
                 <Search className="text-slate-400 ml-2 shrink-0" size={18} />
@@ -2808,10 +2355,8 @@ Patuhi aturan berikut secara ketat:
               </button>
             </div>
 
-            {/* Baris 2: Undo/Redo & Aksi Massal (Khusus Tab Bank Soal) */}
             {tab === "soal" && (
               <div className="flex justify-between items-center gap-2">
-                {/* Undo Redo Mini */}
                 <div className="flex bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden shrink-0">
                   <button
                     onClick={handleUndo}
@@ -2829,7 +2374,6 @@ Patuhi aturan berikut secara ketat:
                   </button>
                 </div>
 
-                {/* Pilih Semua & Sapu Bersih Mini */}
                 {processedData.length > 0 && (
                   <div className="flex gap-2 flex-1">
                     <button
@@ -2864,15 +2408,12 @@ Patuhi aturan berikut secara ketat:
             )}
           </div>
 
-          {/* 4. Pemisah / Label Scroll */}
           <div className="flex justify-center items-center mt-6 mb-2">
             <div className="bg-slate-200 h-1 w-12 rounded-full mb-2"></div>
           </div>
         </div>
-        {/* HEADER STATIS (DISEMBUNYIKAN DI HP) */}
-        <header className="hidden md:flex relative flex-col md:flex-row justify-between items-start md:items-center p-6 md:p-8 rounded-[2rem] shadow-sm border border-emerald-200 gap-4 overflow-hidden bg-emerald-50 z-0">
-          {/* Bola dekorasi motion.div dihapus total agar ringan */}
 
+        <header className="hidden md:flex relative flex-col md:flex-row justify-between items-start md:items-center p-6 md:p-8 rounded-[2rem] shadow-sm border border-emerald-200 gap-4 overflow-hidden bg-emerald-50 z-0">
           <div className="w-full md:w-auto text-center md:text-left">
             <div className="flex flex-col md:flex-row items-center gap-2 md:gap-3">
               <h2 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">
@@ -2892,7 +2433,6 @@ Patuhi aturan berikut secara ketat:
           <div className="flex flex-wrap w-full md:w-auto gap-2 z-10">
             {tab === "soal" && (
               <div className="flex flex-wrap md:flex-nowrap gap-2 w-full md:w-auto items-center">
-                {/* TOOLBAR UNDO & REDO */}
                 <div className="flex bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden w-full md:w-auto justify-center">
                   <button
                     onClick={handleUndo}
@@ -2984,10 +2524,9 @@ Patuhi aturan berikut secara ketat:
             )}
           </div>
         </header>
-        {/* TOGGLE VIEW MODE & STATISTIK (KHUSUS NILAI + ANTI CHEAT) */}
+
         {tab === "nilai" && (
           <div>
-            {/* DI HP DISEMBUNYIKAN KARENA SUDAH ADA DI GRID M-BANKING */}
             <div className="hidden md:flex flex-col md:flex-row items-center w-full md:w-max p-1.5 bg-white border border-slate-200 rounded-xl mb-6 shadow-sm mx-auto md:mx-0 gap-1 md:gap-0">
               <button
                 onClick={() => setNilaiViewMode("rekap")}
@@ -3012,7 +2551,6 @@ Patuhi aturan berikut secara ketat:
                   </span>
                 )}
               </button>
-              {/* TOMBOL PINTU MASUK KELAS VIRTUAL */}
               <button
                 onClick={() => (window.location.href = "/ujian-dashboard")}
                 className="w-full md:w-auto flex justify-center items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-black transition-all bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 shadow-indigo-500/30 md:ml-2 mt-2 md:mt-0"
@@ -3055,7 +2593,7 @@ Patuhi aturan berikut secara ketat:
             )}
           </div>
         )}
-        {/* STATISTIK & TOOLBAR GLOBAL (Disembunyikan di mode Control Anti-Curang) */}
+
         {!(tab === "nilai" && nilaiViewMode === "pelanggaran") && (
           <div className="hidden md:flex flex-col xl:flex-row gap-4">
             <Card className="p-6 bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 shadow-xl min-w-[200px] shrink-0 rounded-[2rem] relative overflow-hidden flex flex-col justify-center">
@@ -3174,7 +2712,7 @@ Patuhi aturan berikut secara ketat:
             </Card>
           </div>
         )}
-        {/* PANEL AKSI MELAYANG (FLOATING BULK DELETE) */}
+
         {selectedIds.length > 0 && tab === "soal" && (
           <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[50] w-max max-w-lg shadow-2xl shadow-red-500/20">
             <div className="bg-slate-900 border border-slate-700 rounded-full px-4 py-3 flex items-center gap-4 text-white">
@@ -3208,46 +2746,30 @@ Patuhi aturan berikut secara ketat:
             </div>
           </div>
         )}
-        {/* ============================================================== */} 
-              {/* KONTEN UTAMA: BANK SOAL ATAU NILAI ATAU PELANGGARAN */}       {" "}
-        {/* ============================================================== */} 
-             {" "}
+
         {loading && data.length === 0 ? (
           <div className="py-20 text-center flex flex-col items-center">
-                       {" "}
             <RefreshCw
               className="animate-spin text-emerald-500 mb-4"
               size={32}
             />
-                       {" "}
             <span className="font-bold text-slate-400 uppercase tracking-widest text-xs">
-                            Memuat Database...            {" "}
+              Memuat Database...
             </span>
-                     {" "}
           </div>
         ) : tab === "soal" ? (
           <div className="max-w-6xl mx-auto relative">
-                        {/* TAMPILAN FOLDER */}           {" "}
             {soalViewMode === "folder" && (
               <div className="space-y-6">
-                               {" "}
                 <div className="flex justify-between items-end mb-2 px-2">
-                                   {" "}
                   <div>
-                                       {" "}
                     <h3 className="text-lg font-black text-slate-700 flex items-center gap-2">
-                                           {" "}
-                      <Library className="text-emerald-500" /> Direktori Soal  
-                                       {" "}
+                      <Library className="text-emerald-500" /> Direktori Soal
                     </h3>
-                                       {" "}
                     <p className="text-sm text-slate-500 font-medium mt-1">
-                                            Pilih folder mapel dan kelas untuk
-                      mengelola soal.                    {" "}
+                      Pilih folder mapel dan kelas untuk mengelola soal.
                     </p>
-                                     {" "}
                   </div>
-                                   {" "}
                   <button
                     onClick={() => {
                       setFilters({ mapel: "", kelas: "" });
@@ -3255,10 +2777,8 @@ Patuhi aturan berikut secara ketat:
                     }}
                     className="text-xs font-bold text-emerald-600 hover:text-emerald-700 underline hidden md:block"
                   >
-                                        Tampilkan Semua Soal                
-                     {" "}
+                    Tampilkan Semua Soal
                   </button>
-                                 {" "}
                 </div>
                 <div className="flex flex-col md:flex-row gap-3 px-2 mb-4">
                   <div className="flex-1 relative">
@@ -3283,17 +2803,13 @@ Patuhi aturan berikut secara ketat:
                     <option value="kelas">Grup: Kelas</option>
                   </select>
                 </div>
-                               {" "}
                 {folderSoal.length === 0 ? (
                   <div className="py-16 text-center text-slate-400 font-bold border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50">
-                                        Belum ada soal tersedia.                
-                     {" "}
+                    Belum ada soal tersedia.
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                       {" "}
                     {folderSoal.map((folder, idx) => {
-                      // Logika Warna Pintar Berdasarkan Kelas (UI Theme TADBIRA Harmony)
                       let color = {
                         border:
                           "hover:border-rose-400 hover:shadow-rose-500/10",
@@ -3314,7 +2830,6 @@ Patuhi aturan berikut secara ketat:
                       const hasIps = kelasStr.includes("IPS");
 
                       if (isSMP) {
-                        // 1. KELAS SMP / MTS: Biru Modern
                         color = {
                           border:
                             "hover:border-blue-400 hover:shadow-blue-500/10",
@@ -3323,7 +2838,6 @@ Patuhi aturan berikut secara ketat:
                           badge: "bg-blue-50 text-blue-700 border-blue-200",
                         };
                       } else if (hasMipa && hasIps) {
-                        // 2. GABUNGAN MIPA & IPS: Emerald (Hijau Mewah)
                         color = {
                           border:
                             "hover:border-emerald-400 hover:shadow-emerald-500/10",
@@ -3333,7 +2847,6 @@ Patuhi aturan berikut secara ketat:
                             "bg-emerald-50 text-emerald-700 border-emerald-200",
                         };
                       } else if (hasMipa) {
-                        // 3. HANYA MIPA SAJA: Rose / Ruby (Aksen Merah Premium)
                         color = {
                           border:
                             "hover:border-rose-400 hover:shadow-rose-500/10",
@@ -3342,7 +2855,6 @@ Patuhi aturan berikut secara ketat:
                           badge: "bg-rose-50 text-rose-700 border-rose-200",
                         };
                       } else if (hasIps) {
-                        // 4. HANYA IPS SAJA: Amber (Oranye Keemasan Khas TADBIRA)
                         color = {
                           border:
                             "hover:border-amber-400 hover:shadow-amber-500/10",
@@ -3360,109 +2872,75 @@ Patuhi aturan berikut secara ketat:
                           }
                           className={`bg-white border border-slate-200 p-5 rounded-[1.5rem] cursor-pointer transition-all group relative overflow-hidden ${color.border}`}
                         >
-                                                   {" "}
                           <div className="absolute -right-4 -bottom-4 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity">
-                                                        <Folder size={100} />   
-                                                 {" "}
+                            <Folder size={100} />
                           </div>
-                                                   {" "}
                           <div
                             className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-sm border ${color.icon}`}
                           >
-                                                       {" "}
                             <Folder
                               size={24}
                               fill="currentColor"
                               className="opacity-20"
                             />
-                                                       {" "}
-                            <Folder size={24} className="absolute" />           
-                                         {" "}
+                            <Folder size={24} className="absolute" />
                           </div>
-                                                   {" "}
                           <h4
                             className={`font-black text-slate-800 text-lg leading-tight mb-2 transition-colors line-clamp-2 ${color.text}`}
                           >
-                                                        {folder.mapel}         
-                                           {" "}
+                            {folder.mapel}
                           </h4>
-                                                   {" "}
                           <div className="flex flex-wrap gap-2 items-center">
-                                                       {" "}
                             <span
                               className={`px-2.5 py-1 rounded-md text-[10px] font-bold border ${color.badge}`}
                             >
-                                                            Kelas {folder.kelas}
-                                                         {" "}
+                              Kelas {folder.kelas}
                             </span>
-                                                       {" "}
                             <span className="bg-slate-100 text-slate-500 px-2.5 py-1 rounded-md text-[10px] font-bold border border-slate-200">
-                                                            {folder.count} Soal
-                                                         {" "}
+                              {folder.count} Soal
                             </span>
-                                                     {" "}
                           </div>
-                                                 {" "}
                         </div>
                       );
                     })}
-                                     {" "}
                   </div>
                 )}
-                             {" "}
               </div>
             )}
-                        {/* TAMPILAN DAFTAR SOAL (LIST) */}           {" "}
             {soalViewMode === "list" && (
               <div className="flex flex-col gap-0 max-w-5xl mx-auto relative">
-                               {" "}
                 <div className="sticky -top-[16px] md:-top-[25px] z-30 bg-slate-50/90 backdrop-blur-md p-3 md:p-4 rounded-2xl border border-slate-200 shadow-sm mb-6 flex justify-between items-center">
-                                   {" "}
                   <div className="flex items-center gap-3">
-                                       {" "}
                     <button
                       onClick={handleBackToFolder}
                       className="p-2 bg-white text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all shadow-sm border border-slate-200"
                     >
-                                            <ArrowLeft size={20} />             
-                           {" "}
+                      <ArrowLeft size={20} />
                     </button>
-                                       {" "}
                     <div>
-                                           {" "}
                       <h3 className="font-black text-slate-800 text-sm md:text-base flex items-center gap-2">
-                                                {filters.mapel || "Semua Mapel"}
-                                               {" "}
+                        {filters.mapel || "Semua Mapel"}
                         {filters.kelas && (
                           <span className="text-slate-400 font-normal">|</span>
                         )}
-                                               {" "}
                         {filters.kelas && (
                           <span className="text-emerald-600">
                             {filters.kelas}
                           </span>
                         )}
-                                             {" "}
                       </h3>
-                                           {" "}
                       <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">
-                                                Menampilkan{" "}
-                        {processedData.length} Soal                      {" "}
+                        Menampilkan {processedData.length} Soal
                       </p>
-                                         {" "}
                     </div>
-                                     {" "}
                   </div>
-                                 {" "}
                 </div>
-                                {renderBankSoal()}             {" "}
+                {renderBankSoal()}
               </div>
             )}
-                     {" "}
           </div>
         ) : (
           <div>
-            {/* VIEW NILAI REKAP */}
             {nilaiViewMode === "rekap" && (
               <>
                 <Card className="hidden md:block overflow-hidden border-slate-200 shadow-xl shadow-slate-200/40 bg-white rounded-[2rem]">
@@ -3575,7 +3053,6 @@ Patuhi aturan berikut secara ketat:
                   </div>
                 </Card>
 
-                {/* Tampilan Mobile Rekap */}
                 <div className="md:hidden flex flex-col gap-4">
                   {pivotNilaiData.data.length === 0 ? (
                     <div className="py-20 text-center text-slate-400 font-semibold text-base bg-white rounded-2xl border border-slate-200">
@@ -3634,7 +3111,6 @@ Patuhi aturan berikut secara ketat:
               </>
             )}
 
-            {/* VIEW LOG RIWAYAT */}
             {nilaiViewMode === "log" && (
               <>
                 <Card className="hidden md:block overflow-hidden border-slate-200 shadow-xl shadow-slate-200/40 bg-white rounded-[2rem]">
@@ -3757,7 +3233,6 @@ Patuhi aturan berikut secara ketat:
                   </div>
                 </Card>
 
-                {/* Tampilan Mobile Log */}
                 <div className="md:hidden flex flex-col gap-4">
                   {processedData.length === 0 ? (
                     <div className="py-20 text-center text-slate-400 font-semibold text-base bg-white rounded-2xl border border-slate-200">
@@ -3829,12 +3304,8 @@ Patuhi aturan berikut secara ketat:
               </>
             )}
 
-            {/* ============================================================== */}
-            {/* VIEW PELANGGARAN / Anti-Curang CONTROL */}
-            {/* ============================================================== */}
             {nilaiViewMode === "pelanggaran" && (
               <div className="space-y-6 max-w-5xl mx-auto">
-                {/* KOTAK SISWA TERKUNCI (Perlu Tindakan) */}
                 <div className="bg-red-50 border border-red-200 rounded-[2rem] p-5 md:p-8 shadow-sm">
                   <div className="flex items-center gap-3 mb-6 border-b border-red-100 pb-4">
                     <div className="p-3 bg-red-100 text-red-600 rounded-xl">
@@ -3896,7 +3367,6 @@ Patuhi aturan berikut secara ketat:
                   )}
                 </div>
 
-                {/* KOTAK RIWAYAT DISKUALIFIKASI */}
                 <div className="bg-slate-800 border border-slate-700 rounded-[2rem] p-5 md:p-8 shadow-xl">
                   <div className="flex items-center gap-3 mb-6 border-b border-slate-700 pb-4">
                     <div className="p-3 bg-slate-700 text-red-400 rounded-xl">
@@ -3977,12 +3447,11 @@ Patuhi aturan berikut secara ketat:
             )}
           </div>
         )}
-        {/* MODAL REVIEW JAWABAN SISWA (SMART PARSER) */}
+
         {isReviewModalOpen && reviewData && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/80 overflow-y-auto">
             <div className="w-full max-w-4xl my-auto py-4 md:py-8">
               <Card className="p-0 shadow-2xl border-0 rounded-[1.5rem] md:rounded-[2rem] bg-white overflow-hidden flex flex-col max-h-[85vh] md:max-h-[90vh]">
-                {/* Header */}
                 <div className="p-4 md:p-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
                   <div>
                     <h3 className="text-lg md:text-xl font-bold text-slate-800">
@@ -4001,7 +3470,6 @@ Patuhi aturan berikut secara ketat:
                   </button>
                 </div>
 
-                {/* Isi Detail (Pintar Membaca Nama Kolom) */}
                 <div className="p-4 md:p-6 overflow-y-auto bg-slate-50/50 scrollbar-thin">
                   {(() => {
                     const key = Object.keys(reviewData).find(
@@ -4103,438 +3571,70 @@ Patuhi aturan berikut secara ketat:
             </div>
           </div>
         )}
-        {/* MODAL BUAT/EDIT MANUAL SEDERHANA */}
-        {isModalOpen && tab === "soal" && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/80 overflow-y-auto">
-            <div className="w-full max-w-4xl my-auto py-4 md:py-8">
-              <Card className="p-4 md:p-8 shadow-2xl border-0 rounded-[1.5rem] md:rounded-[2rem] bg-white">
-                <div className="flex justify-between items-center mb-4 md:mb-6 pb-3 md:pb-5 border-b border-slate-100">
-                  <div>
-                    <h3 className="text-lg md:text-2xl font-bold text-slate-800 tracking-tight">
-                      {isEdit ? "Edit Soal" : "Buat Soal Baru"}
-                    </h3>
-                    <p className="text-emerald-600 font-bold text-[10px] md:text-xs uppercase tracking-widest mt-0.5 md:mt-1">
-                      Sistem Database CBT
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setIsModalOpen(false)}
-                    disabled={isSaving}
-                    className="p-1.5 md:p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg md:rounded-xl transition-colors disabled:opacity-50 border border-transparent hover:border-red-100"
-                  >
-                    <X size={20} className="md:w-6 md:h-6" />
-                  </button>
-                </div>
-                <form onSubmit={handleSave} className="space-y-4 md:space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-4 bg-slate-50 p-4 md:p-5 rounded-[1rem] md:rounded-[1.5rem] border border-slate-100">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-slate-500 ml-1">
-                        ID Sistem
-                      </label>
-                      <input
-                        type="text"
-                        className="w-full p-2.5 md:p-3.5 text-xs md:text-sm rounded-lg md:rounded-xl font-bold outline-none transition-all shadow-sm bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed"
-                        value={isEdit ? formData.id : "Otomatis"}
-                        disabled={true}
-                      />
-                    </div>
-                    <div className="space-y-1.5 md:col-span-1">
-                      <label className="text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-slate-500 ml-1">
-                        Mapel
-                      </label>
-                      <PremiumSelect
-                        value={formData.mapel || ""}
-                        onChange={(val) =>
-                          setFormData({ ...formData, mapel: val })
-                        }
-                        options={
-                          mapelOptions.length > 0
-                            ? mapelOptions.map((opt) => ({
-                                label: opt,
-                                value: opt,
-                              }))
-                            : [{ label: "Memuat Data...", value: "" }]
-                        }
-                        placeholder="Pilih Mapel..."
-                        disabled={isSaving || mapelOptions.length === 0}
-                      />
-                    </div>
-                    <div className="space-y-1.5 md:col-span-1">
-                      <label className="text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-slate-500 ml-1">
-                        Kelas
-                      </label>
-                      <PremiumMultiSelect
-                        value={formData.kelas || ""}
-                        onChange={(val) =>
-                          setFormData({ ...formData, kelas: val })
-                        }
-                        options={OPSI_KELAS_LENGKAP}
-                        placeholder="Pilih Kelas..."
-                        disabled={isSaving}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-amber-600 ml-1">
-                        Bobot Poin
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        className="w-full p-2.5 md:p-3.5 text-xs md:text-sm bg-amber-50 border border-amber-200 rounded-lg md:rounded-xl font-bold text-amber-700 outline-none focus:border-amber-400"
-                        value={formData.poin || ""}
-                        onChange={(e) =>
-                          setFormData({ ...formData, poin: e.target.value })
-                        }
-                        disabled={isSaving}
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-1 md:space-y-1.5">
-                    <label className="text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-slate-500 ml-1">
-                      Wacana / Teks Cerita (Opsional)
-                    </label>
-                    <GoogleFormEditor
-                      value={formData.wacana || ""}
-                      onChange={(val) =>
-                        setFormData({ ...formData, wacana: val })
-                      }
-                      placeholder="Tuliskan paragraf wacana di sini, block teks untuk Bold/Italic..."
-                      disabled={isSaving}
-                    />
-                    <p className="text-[9px] md:text-[10px] font-medium text-amber-600 ml-1 mt-1 flex items-start md:items-center gap-1">
-                      <AlertTriangle
-                        size={12}
-                        className="shrink-0 mt-0.5 md:mt-0"
-                      />{" "}
-                      Jangan gunakan kalimat "Untuk soal nomor 1-5" di dalam
-                      teks wacana, karena soal CBT akan diacak.
-                    </p>
-                  </div>
-                  <div className="space-y-1 md:space-y-1.5">
-                    <div className="flex justify-between items-center ml-1">
-                      <label className="text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                        Pertanyaan Inti (Bisa Format Teks & Gambar){" "}
-                        <span className="text-red-500">*</span>
-                      </label>
-                      {isUploadingFormImg && (
-                        <span className="text-xs text-emerald-500 font-bold flex items-center gap-1">
-                          <RefreshCw size={12} className="animate-spin" />{" "}
-                          Uploading...
-                        </span>
-                      )}
-                    </div>
-                    <GoogleFormEditor
-                      value={formData.pertanyaan || ""}
-                      onChange={(val) =>
-                        setFormData({ ...formData, pertanyaan: val })
-                      }
-                      placeholder="Ketik pertanyaan di sini, block teks untuk Bold/Italic..."
-                      disabled={isSaving || isUploadingFormImg}
-                      onImageUpload={handleFormImageUpload}
-                    />
-                  </div>
-                  {/* Input Gambar Sederhana via Modal */}
-                  <div className="space-y-1 md:space-y-1.5">
-                    <label className="text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-slate-500 ml-1">
-                      URL Lampiran Gambar (Bila ada)
-                    </label>
-                    <input
-                      type="text"
-                      disabled={isSaving}
-                      placeholder="Paste link gambar (https://...) atau biarkan kosong."
-                      className="w-full p-2.5 md:p-3.5 text-xs md:text-sm bg-white border border-slate-200 rounded-lg md:rounded-xl font-medium text-slate-700 outline-none focus:border-emerald-500 transition-all shadow-sm"
-                      value={formData.link_gambar || ""}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          link_gambar: e.target.value,
-                        })
-                      }
-                    />
-                    <p className="text-[9px] md:text-[10px] font-medium text-slate-500 ml-1 mt-1">
-                      Anda juga bisa mengunggah foto langsung dari layar utama
-                      Bank Soal menggunakan tombol <b>Ikon Gambar</b> pada
-                      masing-masing soal.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-5 pt-1 md:pt-2">
-                    {["A", "B", "C", "D", "E"].map((opt) => {
-                      const keyMap = `opsi_${opt.toLowerCase()}`;
-                      const isKunci = formData.jawaban_benar === opt;
-                      return (
-                        <div
-                          key={opt}
-                          className="space-y-1 md:space-y-1.5 relative"
-                        >
-                          <label
-                            className={`text-[10px] md:text-[11px] font-bold uppercase tracking-wider ml-1 ${isKunci ? "text-emerald-600" : "text-slate-500"}`}
-                          >
-                            Pilihan {opt} {isKunci && "(KUNCI)"}
-                          </label>
-                          <textarea
-                            required={opt !== "E"}
-                            disabled={isSaving}
-                            placeholder={`Jawaban ${opt}...`}
-                            className={`w-full p-2.5 md:p-3.5 text-xs md:text-sm border rounded-lg md:rounded-xl font-medium outline-none transition-all shadow-sm whitespace-pre-wrap resize-y ${isKunci ? "bg-emerald-50 border-emerald-300 text-emerald-900 focus:ring-2 focus:ring-emerald-500/20" : "bg-white border-slate-200 text-slate-700 focus:border-emerald-500"}`}
-                            value={formData[keyMap] || ""}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                [keyMap]: e.target.value,
-                              })
-                            }
-                          />
-                        </div>
-                      );
-                    })}
-                    <div className="space-y-1 md:space-y-1.5">
-                      <label className="text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-emerald-600 ml-1">
-                        Tetapkan Kunci Jawaban
-                      </label>
-                      <select
-                        required
-                        disabled={isSaving}
-                        className="w-full p-2.5 md:p-3.5 text-xs md:text-sm bg-gradient-to-r from-emerald-600 to-emerald-500 border border-emerald-400 text-white rounded-lg md:rounded-xl font-bold outline-none shadow-md cursor-pointer"
-                        value={formData.jawaban_benar || "A"}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            jawaban_benar: e.target.value,
-                          })
-                        }
-                      >
-                        <option value="A">PILIHAN A</option>
-                        <option value="B">PILIHAN B</option>
-                        <option value="C">PILIHAN C</option>
-                        <option value="D">PILIHAN D</option>
-                        <option value="E">PILIHAN E</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="pt-4 md:pt-6 mt-2 md:mt-4 border-t border-slate-100">
-                    <button
-                      type="submit"
-                      disabled={isSaving}
-                      className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-bold text-sm md:text-sm py-3 md:py-4 rounded-lg md:rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/30 hover:scale-[1.01] active:scale-95 transition-all uppercase tracking-widest disabled:opacity-70 disabled:cursor-not-allowed border border-emerald-400"
-                    >
-                      {isSaving ? (
-                        <RefreshCw size={18} className="animate-spin" />
-                      ) : (
-                        <Save size={18} />
-                      )}{" "}
-                      {isSaving ? "Menyimpan ke Server..." : "Simpan Soal"}
-                    </button>
-                  </div>
-                </form>
-              </Card>
-            </div>
-          </div>
-        )}
-        {/* MODAL IMPORT MASAL */}
-        {isBulkOpen && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/80 overflow-y-auto">
-            <div className="w-full max-w-5xl my-auto py-4 md:py-8">
-              <Card className="p-4 md:p-8 shadow-2xl border-0 rounded-[1.5rem] md:rounded-[2rem] bg-white">
-                <div className="flex justify-between items-start md:items-center mb-4 md:mb-6 pb-3 md:pb-5 border-b border-slate-100">
-                  <div>
-                    <h3 className="text-lg md:text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-2 md:gap-3">
-                      <UploadCloud className="text-emerald-500" size={24} />{" "}
-                      Import Soal Massal
-                    </h3>
-                    <p className="text-slate-500 font-medium text-[10px] md:text-xs mt-1 md:mt-1.5 leading-relaxed">
-                      Sistem AI otomatis memisahkan Wacana dan Pertanyaan.{" "}
-                      <br />
-                      <strong className="text-amber-600">
-                        Tips Gambar:
-                      </strong>{" "}
-                      Untuk menyisipkan gambar pada soal, silakan simpan proses
-                      import ini terlebih dahulu, lalu klik tombol{" "}
-                      <b>Ikon Gambar</b> pada masing-masing soal.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setIsBulkOpen(false)}
-                    disabled={isSaving}
-                    className="p-1.5 md:p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg md:rounded-xl transition-colors disabled:opacity-50 border border-transparent hover:border-red-100"
-                  >
-                    <X size={20} className="md:w-6 md:h-6" />
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-3 md:mb-4">
-                  <div className="w-full">
-                    <PremiumSelect
-                      value={bulkMapel}
-                      onChange={(val) => setBulkMapel(val)}
-                      options={
-                        mapelOptions.length > 0
-                          ? mapelOptions.map((opt) => ({
-                              label: opt,
-                              value: opt,
-                            }))
-                          : [{ label: "Memuat Data...", value: "" }]
-                      }
-                      placeholder="Pilih Mata Pelajaran..."
-                      disabled={isSaving || mapelOptions.length === 0}
-                    />
-                  </div>
-                  <div className="w-full">
-                    <PremiumMultiSelect
-                      value={bulkKelas}
-                      onChange={(val) => setBulkKelas(val)}
-                      options={OPSI_KELAS_LENGKAP}
-                      placeholder="Pilih Kelas Sasaran..."
-                      disabled={isSaving}
-                    />
-                  </div>
-                  <div className="relative flex items-center shadow-sm rounded-lg md:rounded-xl">
-                    <Target
-                      className="absolute left-3 text-amber-500"
-                      size={16}
-                    />
-                    <input
-                      type="number"
-                      step="any"
-                      className="w-full p-2.5 md:p-3.5 pl-9 md:pl-10 text-xs md:text-sm bg-amber-50 border border-amber-200 rounded-lg md:rounded-xl font-bold text-amber-700 outline-none focus:border-amber-400"
-                      placeholder="Poin per Soal"
-                      value={bulkPoin}
-                      onChange={(e) => setBulkPoin(e.target.value)}
-                      disabled={isSaving}
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-between items-end mb-2 mt-2">
-                  <label className="text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-slate-500 ml-1">
-                    Teks Soal Asli
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleRapikanDenganAI}
-                    disabled={isProcessingAI || isSaving}
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[10px] md:text-xs font-bold hover:bg-purple-100 transition-colors shadow-sm"
-                  >
-                    {isProcessingAI ? (
-                      <RefreshCw className="animate-spin" size={14} />
-                    ) : (
-                      <Bot size={14} />
-                    )}
-                    {isProcessingAI
-                      ? "AI Sedang Bekerja..."
-                      : "Bantu Perbaiki Rumus (AI)"}
-                  </button>
-                </div>
-                <textarea
-                  className="w-full p-4 md:p-5 bg-slate-50 border border-slate-200 rounded-xl md:rounded-[1.5rem] font-mono text-[11px] md:text-[13px] outline-none focus:bg-white focus:border-emerald-500 transition-all resize-y h-48 md:h-64 text-slate-700 shadow-inner leading-relaxed"
-                  placeholder="Paste soal dari Ms.Word ke sini...&#10;&#10;Sistem Menerima 2 Format Kunci:&#10;&#10;FORMAT 1 (Tanda Bintang):&#10;1. Apa warna langit?&#10;A. Merah&#10;*B. Biru&#10;C. Hijau&#10;&#10;FORMAT 2 (Tulis Kunci di bawah):&#10;2. 1+1 = ?&#10;A. 1&#10;B. 2&#10;C. 3&#10;Kunci: B"
-                  value={bulkText}
-                  onChange={(e) => setBulkText(e.target.value)}
-                  disabled={isSaving}
-                />
-                <div className="flex justify-end mt-4 md:mt-5">
-                  <button
-                    onClick={handleParseBulkText}
-                    disabled={!bulkText || !bulkMapel || !bulkKelas || isSaving}
-                    className="w-full md:w-auto bg-slate-800 text-white font-bold text-sm px-6 py-3.5 rounded-lg md:rounded-xl shadow-md hover:bg-slate-900 active:scale-95 transition-all disabled:opacity-50"
-                  >
-                    Pratinjau (Preview) AI
-                  </button>
-                </div>
-                {parsedBulkData.length > 0 && (
-                  <div className="mt-6 md:mt-8 border-t border-slate-100 pt-5 md:pt-6">
-                    <div className="flex flex-col md:flex-row items-start md:items-center gap-2 mb-4">
-                      <span className="bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-bold border border-emerald-200">
-                        {parsedBulkData.length} Soal Terdeteksi
-                      </span>
-                      <span className="text-[10px] md:text-xs text-slate-500 font-medium">
-                        Silakan periksa hasil bacaan sistem di bawah ini.
-                      </span>
-                    </div>
-                    <div className="max-h-[400px] md:max-h-[500px] overflow-y-auto bg-slate-50 rounded-xl md:rounded-[1.5rem] border border-slate-200 p-3 md:p-4 space-y-3 md:space-y-4 mb-5 md:mb-6 scrollbar-thin">
-                      {parsedBulkData.map((item, idx) => (
-                        <div
-                          key={idx}
-                          className="bg-white p-4 md:p-5 rounded-xl shadow-sm border border-slate-100 relative"
-                        >
-                          <div className="absolute top-3 right-3 md:top-4 md:right-4 text-[9px] md:text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded">
-                            #{idx + 1}
-                          </div>
-                          {item.wacana && (
-                            <div className="mb-3 p-2.5 md:p-3 bg-amber-50/50 border border-amber-100 text-[10px] md:text-xs text-slate-700 rounded-lg leading-relaxed">
-                              <strong className="text-amber-600 block mb-1">
-                                Teks Wacana Terikat:
-                              </strong>
-                              <div className="whitespace-pre-wrap leading-relaxed">
-                                <Latex>{item.wacana || ""}</Latex>
-                              </div>
-                            </div>
-                          )}
-                          <div className="text-xs md:text-sm font-semibold text-slate-800 whitespace-pre-wrap mb-3 md:mb-4 pr-8 md:pr-10 leading-relaxed">
-                            <Latex>{item.pertanyaan || ""}</Latex>
-                          </div>
-                          <div className="flex flex-col gap-1 md:gap-1.5 text-[10px] md:text-xs text-slate-600 font-medium">
-                            {item.opsi_a && (
-                              <div
-                                className={`p-2 md:p-2.5 rounded-lg whitespace-pre-wrap ${item.jawaban_benar === "A" ? "bg-emerald-50 text-emerald-800 font-bold border border-emerald-100" : "bg-slate-50 border border-transparent"}`}
-                              >
-                                <strong>A.</strong>{" "}
-                                <Latex>{item.opsi_a || ""}</Latex>
-                              </div>
-                            )}
-                            {item.opsi_b && (
-                              <div
-                                className={`p-2 md:p-2.5 rounded-lg whitespace-pre-wrap ${item.jawaban_benar === "B" ? "bg-emerald-50 text-emerald-800 font-bold border border-emerald-100" : "bg-slate-50 border border-transparent"}`}
-                              >
-                                <strong>B.</strong>{" "}
-                                <Latex>{item.opsi_b || ""}</Latex>
-                              </div>
-                            )}
-                            {item.opsi_c && (
-                              <div
-                                className={`p-2 md:p-2.5 rounded-lg whitespace-pre-wrap ${item.jawaban_benar === "C" ? "bg-emerald-50 text-emerald-800 font-bold border border-emerald-100" : "bg-slate-50 border border-transparent"}`}
-                              >
-                                <strong>C.</strong>{" "}
-                                <Latex>{item.opsi_c || ""}</Latex>
-                              </div>
-                            )}
-                            {item.opsi_d && (
-                              <div
-                                className={`p-2 md:p-2.5 rounded-lg whitespace-pre-wrap ${item.jawaban_benar === "D" ? "bg-emerald-50 text-emerald-800 font-bold border border-emerald-100" : "bg-slate-50 border border-transparent"}`}
-                              >
-                                <strong>D.</strong>{" "}
-                                <Latex>{item.opsi_d || ""}</Latex>
-                              </div>
-                            )}
-                            {item.opsi_e && (
-                              <div
-                                className={`p-2 md:p-2.5 rounded-lg whitespace-pre-wrap ${item.jawaban_benar === "E" ? "bg-emerald-50 text-emerald-800 font-bold border border-emerald-100" : "bg-slate-50 border border-transparent"}`}
-                              >
-                                <strong>E.</strong>{" "}
-                                <Latex>{item.opsi_e || ""}</Latex>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <button
-                      onClick={handleSaveBulk}
-                      disabled={isSaving}
-                      className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-bold text-sm md:text-sm py-3 md:py-4 rounded-lg md:rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/30 hover:scale-[1.01] active:scale-95 transition-all uppercase tracking-widest disabled:opacity-70 border border-emerald-400"
-                    >
-                      {isSaving ? (
-                        <RefreshCw className="animate-spin" size={18} />
-                      ) : (
-                        <Save size={18} />
-                      )}{" "}
-                      Simpan {parsedBulkData.length} Soal ke Database
-                    </button>
-                  </div>
-                )}
-              </Card>
-            </div>
-          </div>
-        )}
-        {/* MODAL CUSTOM ALERT */}
+
+        {/* ========================================================= */}
+        {/* MEMANGGIL MODAL DARI FILE EKSTERNAL YANG BARU DIBUAT */}
+        {/* ========================================================= */}
+
+        <ModalSoalManual
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          isEdit={isEdit}
+          formData={formData}
+          setFormData={setFormData}
+          isSaving={isSaving}
+          handleSave={handleSave}
+          mapelOptions={mapelOptions}
+          kelasOptions={OPSI_KELAS_LENGKAP}
+          isUploadingFormImg={isUploadingFormImg}
+          handleFormImageUpload={handleFormImageUpload}
+        />
+
+        <ModalImportMassal
+          isOpen={isBulkOpen}
+          onClose={() => setIsBulkOpen(false)}
+          isSaving={isSaving}
+          mapelOptions={mapelOptions}
+          kelasOptions={OPSI_KELAS_LENGKAP}
+          bulkMapel={bulkMapel}
+          setBulkMapel={setBulkMapel}
+          bulkKelas={bulkKelas}
+          setBulkKelas={setBulkKelas}
+          bulkPoin={bulkPoin}
+          setBulkPoin={setBulkPoin}
+          bulkText={bulkText}
+          setBulkText={setBulkText}
+          isProcessingAI={isProcessingAI}
+          handleRapikanDenganAI={handleRapikanDenganAI}
+          parsedBulkData={parsedBulkData}
+          handleParseBulkText={handleParseBulkText}
+          handleSaveBulk={handleSaveBulk}
+          LatexComponent={Latex}
+        />
+
+        <ModalTemplateDummy
+          isOpen={isDummyModalOpen}
+          onClose={() => setIsDummyModalOpen(false)}
+          isSaving={isSaving}
+          dummyConfig={dummyConfig}
+          setDummyConfig={setDummyConfig}
+          mapelOptions={mapelOptions}
+          kelasOptions={OPSI_KELAS_LENGKAP}
+          handleGenerateDummy={handleGenerateDummy}
+        />
+
+        <SSmode
+          isOpen={isSSModeOpen}
+          onClose={() => setIsSSModeOpen(false)}
+          currentDbSoal={allData.soal}
+          mapelOptions={mapelOptions}
+          kelasOptions={OPSI_KELAS_LENGKAP}
+          initialMapel={filters.mapel || ""}
+          initialKelas={filters.kelas || ""}
+          onUploadSuccess={() => fetchData(false)}
+          namaGuru={namaGuruLog}
+        />
+
         {customAlert.isOpen && (
           <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/80">
             <div className="w-full max-w-sm p-6 md:p-8 shadow-2xl border-0 rounded-[1.5rem] md:rounded-[2rem] bg-white text-center flex flex-col items-center">
@@ -4588,7 +3688,7 @@ Patuhi aturan berikut secara ketat:
             </div>
           </div>
         )}
-        {/* EXPORT MENU MODAL */}
+
         {isExportMenuOpen && (
           <div className="fixed inset-0 z-[90] flex items-end md:items-center justify-center bg-slate-900/80 sm:p-4">
             <div className="w-full max-w-sm bg-white rounded-t-[2rem] md:rounded-[2rem] p-6 shadow-2xl">
@@ -4650,7 +3750,7 @@ Patuhi aturan berikut secara ketat:
             </div>
           </div>
         )}
-        {/* MOBILE FILTER MODAL */}
+
         {isMobileFilterOpen && (
           <div className="fixed inset-0 z-[95] flex items-end justify-center bg-slate-900/80 md:hidden">
             <div className="w-full bg-white rounded-t-[2rem] p-6 shadow-2xl max-h-[85vh] flex flex-col">
@@ -4718,120 +3818,6 @@ Patuhi aturan berikut secara ketat:
             </div>
           </div>
         )}
-        {/* MODAL GENERATE SOAL DUMMY */}
-        {isDummyModalOpen && (
-          <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 bg-slate-900/80">
-            <div className="w-full max-w-md bg-white rounded-[1.5rem] p-6 shadow-2xl">
-              <div className="flex justify-between items-center mb-5 pb-3 border-b border-slate-100">
-                <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                  <Layers className="text-blue-500" /> Buat Template Soal
-                  (Kosong)
-                </h3>
-                <button
-                  onClick={() => setIsDummyModalOpen(false)}
-                  className="p-2 bg-slate-100 rounded-full hover:bg-slate-200"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <form onSubmit={handleGenerateDummy} className="space-y-4">
-                <div>
-                  <label className="text-xs font-bold text-slate-500 mb-1 block">
-                    Pilih Mapel
-                  </label>
-                  <PremiumSelect
-                    value={dummyConfig.mapel}
-                    onChange={(val) =>
-                      setDummyConfig({ ...dummyConfig, mapel: val })
-                    }
-                    options={mapelOptions.map((opt) => ({
-                      label: opt,
-                      value: opt,
-                    }))}
-                    placeholder="Mata Pelajaran..."
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-500 mb-1 block">
-                    Sasaran Kelas
-                  </label>
-                  <PremiumMultiSelect
-                    value={dummyConfig.kelas}
-                    onChange={(val) =>
-                      setDummyConfig({ ...dummyConfig, kelas: val })
-                    }
-                    options={OPSI_KELAS_LENGKAP}
-                    placeholder="Pilih Kelas..."
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 mb-1 block">
-                      Mode Jumlah Soal
-                    </label>
-                    <select
-                      className="w-full p-3 border border-slate-200 rounded-xl font-bold bg-slate-50 outline-none"
-                      value={dummyConfig.jumlah}
-                      onChange={(e) =>
-                        setDummyConfig({
-                          ...dummyConfig,
-                          jumlah: Number(e.target.value),
-                        })
-                      }
-                    >
-                      <option value={10}>10 Soal (Test)</option>
-                      <option value={40}>40 Soal</option>
-                      <option value={50}>50 Soal</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 mb-1 block">
-                      Poin per Soal
-                    </label>
-                    <input
-                      type="number"
-                      step="any"
-                      required
-                      className="w-full p-3 border border-slate-200 rounded-xl font-bold bg-slate-50 outline-none"
-                      value={dummyConfig.poin}
-                      onChange={(e) =>
-                        setDummyConfig({ ...dummyConfig, poin: e.target.value })
-                      }
-                    />
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="w-full mt-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex justify-center items-center gap-2 disabled:opacity-50"
-                >
-                  {isSaving ? (
-                    <RefreshCw className="animate-spin" size={18} />
-                  ) : (
-                    <Check size={18} />
-                  )}{" "}
-                  Generate Soal Sekarang
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
-        {/* ========================================== */}
-        {/* LANGKAH 5: MODAL SNAP PDF (SSmode) */}
-        {/* ========================================== */}
-        <SSmode
-          isOpen={isSSModeOpen}
-          onClose={() => setIsSSModeOpen(false)}
-          currentDbSoal={allData.soal}
-          mapelOptions={mapelOptions}
-          kelasOptions={OPSI_KELAS_LENGKAP} // Menggunakan list kelas yang ada di dashboard
-          initialMapel={filters.mapel || ""}
-          initialKelas={filters.kelas || ""}
-          onUploadSuccess={() => {
-            fetchData(false);
-          }}
-          namaGuru={namaGuruLog}
-        />
       </div>
     </Dashboard>
   );

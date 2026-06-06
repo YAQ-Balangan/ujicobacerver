@@ -1,5 +1,5 @@
 // src/pages/LoginPage.jsx
-// KODE SESUDAH (Full Code tinggal salin)
+// KODE SESUDAH
 import React, { useState, useContext } from "react";
 import {
   User,
@@ -36,12 +36,13 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="bg-slate-100 flex items-center justify-center p-6 font-sans w-full min-h-screen">
-      {/* FORM CARD - Pop It Container */}
-      <div className="w-full max-w-[360px] sm:max-w-[380px] bg-slate-100 p-8 sm:p-10 rounded-[2.5rem] shadow-[14px_14px_28px_#cbd5e1,-14px_-14px_28px_#ffffff] relative z-10">
-        <div className="flex flex-col items-center mb-8 text-center">
-          {/* Logo Container 3D Timbul */}
-          <div className="w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center mb-5 rounded-2xl shadow-[6px_6px_12px_#cbd5e1,-6px_-6px_12px_#ffffff] bg-slate-100 p-3">
+    // Padding luar diperkecil menjadi p-2 agar menyesuaikan margin
+    <div className="bg-slate-100 flex items-center justify-center p-2 font-sans w-full min-h-screen">
+      {/* FORM CARD - Diperkecil (max-w-[320px]), margin m-2 sekeliling, dan padding p-6 */}
+      <div className="w-full max-w-[320px] m-2 bg-slate-100 p-6 rounded-[2rem] shadow-[10px_10px_20px_#cbd5e1,-10px_-10px_20px_#ffffff] relative z-10 transition-all duration-300">
+        {/* LOGO & JUDUL - Diperkecil ukurannya */}
+        <div className="flex flex-col items-center mb-6 text-center">
+          <div className="w-16 h-16 flex items-center justify-center mb-4 rounded-2xl shadow-[4px_4px_8px_#cbd5e1,-4px_-4px_8px_#ffffff] bg-slate-100 p-2.5">
             <img
               src={logoTADBIRA}
               alt="Logo TADBIRA"
@@ -49,38 +50,40 @@ const LoginPage = () => {
             />
           </div>
 
-          <h1 className="text-2xl font-black text-slate-700 tracking-tight">
+          <h1 className="text-xl font-black text-slate-700 tracking-tight">
             TADBIRA
           </h1>
-          <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mt-2">
+          <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mt-1.5">
             "Tata Kelola Digital Berbasis Akurasi"
           </p>
-          <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest mt-1">
+          <p className="text-[8px] font-bold text-amber-600 uppercase tracking-widest mt-1">
             Online Based Test 2026
           </p>
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 text-red-600 text-xs font-bold rounded-2xl shadow-[inset_4px_4px_8px_#fca5a5,inset_-4px_-4px_8px_#fef2f2] flex items-center justify-center gap-2">
-            <AlertTriangle size={14} />
+          <div className="mb-4 p-3 bg-red-50 text-red-600 text-[10px] font-bold rounded-xl shadow-[inset_3px_3px_6px_#fca5a5,inset_-3px_-3px_6px_#fef2f2] flex items-center justify-center gap-1.5">
+            <AlertTriangle size={12} />
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Jarak antar form dirapatkan menjadi space-y-4 */}
+        <form onSubmit={handleSubmit} className="space-y-4">
           {/* INPUT USERNAME */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-bold uppercase text-slate-500 ml-2 tracking-wider">
+          <div className="space-y-1.5">
+            <label className="text-[9px] font-bold uppercase text-slate-500 ml-2 tracking-wider">
               Username
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-                <User size={18} />
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <User size={14} />
               </div>
+              {/* Input diperkecil (py-2.5, text-xs, rounded-xl) bayangan disesuaikan */}
               <input
                 type="text"
                 required
-                className="w-full pl-12 pr-4 py-3.5 bg-slate-100 rounded-2xl font-semibold text-sm text-slate-700 outline-none shadow-[inset_5px_5px_10px_#cbd5e1,inset_-5px_-5px_10px_#ffffff] focus:shadow-[inset_3px_3px_6px_#cbd5e1,inset_-3px_-3px_6px_#ffffff] transition-all duration-300 placeholder:text-slate-400"
+                className="w-full pl-9 pr-3 py-2.5 bg-slate-100 rounded-xl font-semibold text-xs text-slate-700 outline-none shadow-[inset_4px_4px_8px_#cbd5e1,inset_-4px_-4px_8px_#ffffff] focus:shadow-[inset_2px_2px_4px_#cbd5e1,inset_-2px_-2px_4px_#ffffff] transition-all duration-300 placeholder:text-slate-400"
                 placeholder="Masukkan Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -89,53 +92,53 @@ const LoginPage = () => {
           </div>
 
           {/* INPUT PASSWORD */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-bold uppercase text-slate-500 ml-2 tracking-wider">
+          <div className="space-y-1.5">
+            <label className="text-[9px] font-bold uppercase text-slate-500 ml-2 tracking-wider">
               Password
             </label>
             <div className="relative flex items-center">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-                <Lock size={18} />
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <Lock size={14} />
               </div>
               <input
                 type={showPassword ? "text" : "password"}
                 required
-                className="w-full pl-12 pr-14 py-3.5 bg-slate-100 rounded-2xl font-semibold text-sm text-slate-700 outline-none shadow-[inset_5px_5px_10px_#cbd5e1,inset_-5px_-5px_10px_#ffffff] focus:shadow-[inset_3px_3px_6px_#cbd5e1,inset_-3px_-3px_6px_#ffffff] transition-all duration-300 placeholder:text-slate-400"
+                className="w-full pl-9 pr-10 py-2.5 bg-slate-100 rounded-xl font-semibold text-xs text-slate-700 outline-none shadow-[inset_4px_4px_8px_#cbd5e1,inset_-4px_-4px_8px_#ffffff] focus:shadow-[inset_2px_2px_4px_#cbd5e1,inset_-2px_-2px_4px_#ffffff] transition-all duration-300 placeholder:text-slate-400"
                 placeholder="Masukkan Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
 
-              {/* TOMBOL MATA (POP IT STYLE) - Sekarang berbentuk bulatan timbul yang bisa "dipop" */}
+              {/* TOMBOL MATA POP IT - Diperkecil */}
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-2 w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 hover:text-emerald-500 shadow-[3px_3px_6px_#cbd5e1,-3px_-3px_6px_#ffffff] active:shadow-[inset_3px_3px_6px_#cbd5e1,inset_-3px_-3px_6px_#ffffff] active:translate-y-[1px] transition-all duration-150 outline-none"
+                className="absolute right-1.5 w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 hover:text-emerald-500 shadow-[2px_2px_4px_#cbd5e1,-2px_-2px_4px_#ffffff] active:shadow-[inset_2px_2px_4px_#cbd5e1,inset_-2px_-2px_4px_#ffffff] active:translate-y-[1px] transition-all duration-150 outline-none"
               >
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
             </div>
           </div>
 
-          {/* TOMBOL MASUK (POP IT STYLE) */}
-          <div className="pt-6">
+          {/* TOMBOL MASUK POP IT - Diperkecil namun tetap empuk */}
+          <div className="pt-4">
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-emerald-500 text-white font-black py-4 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-[8px_8px_16px_#cbd5e1,-8px_-8px_16px_#ffffff] hover:bg-emerald-600 active:shadow-[inset_6px_6px_12px_#047857,inset_-6px_-6px_12px_#34d399] active:translate-y-[3px] transition-all duration-150 uppercase tracking-[0.2em] disabled:opacity-70 disabled:cursor-not-allowed outline-none"
+              className="w-full bg-emerald-500 text-white font-black py-3 rounded-xl text-[11px] flex items-center justify-center gap-1.5 shadow-[5px_5px_10px_#cbd5e1,-5px_-5px_10px_#ffffff] hover:bg-emerald-400 active:shadow-[inset_4px_4px_8px_#047857,inset_-4px_-4px_8px_#34d399] active:translate-y-[2px] transition-all duration-150 uppercase tracking-[0.2em] disabled:opacity-70 disabled:cursor-not-allowed outline-none"
             >
               {loading ? (
-                <Loader2 size={18} className="animate-spin" />
+                <Loader2 size={16} className="animate-spin" />
               ) : (
                 <>
-                  Masuk <ArrowRight size={18} />
+                  Masuk <ArrowRight size={16} />
                 </>
               )}
             </button>
           </div>
         </form>
 
-        <p className="text-center mt-10 text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+        <p className="text-center mt-8 text-[8px] font-bold text-slate-400 uppercase tracking-widest">
           &copy; 2026 Ahmad Maulana
         </p>
       </div>

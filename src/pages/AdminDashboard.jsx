@@ -1,5 +1,5 @@
 // src/pages/AdminDashboard.jsx
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Calendar,
@@ -18,8 +18,6 @@ import {
   Check,
   AlertTriangle,
   Info,
-  Square,
-  CheckSquare,
   Lock,
   Unlock,
   ListChecks,
@@ -27,7 +25,13 @@ import {
 } from "lucide-react";
 import { api } from "../api/api";
 import Dashboard from "../components/layout/Dashboard";
-import { Card, Badge } from "../components/ui/Ui";
+// === KITA IMPOR KOMPONEN UI DARI Ui.jsx ===
+import {
+  Card,
+  Badge,
+  PremiumSelect,
+  PremiumMultiSelect,
+} from "../components/ui/Ui";
 
 // ==========================================
 // HELPER: FORMAT TANGGAL
@@ -55,237 +59,6 @@ const formatTanggal = (isoString) => {
     }
   }
   return isoString;
-};
-
-// ==========================================
-// 1. KOMPONEN PREMIUM CUSTOM DROPDOWN (SINGLE)
-// ==========================================
-const PremiumSelect = ({
-  value,
-  onChange,
-  options,
-  placeholder,
-  disabled,
-  icon,
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target))
-        setIsOpen(false);
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const selectedOption = options.find(
-    (opt) => String(opt.value) === String(value),
-  );
-
-  return (
-    <div className="relative w-full" ref={dropdownRef}>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setIsOpen(!isOpen)}
-        className={`w-full flex items-center justify-between p-2.5 md:p-3 text-sm bg-white border transition-all rounded-lg md:rounded-xl outline-none shadow-sm min-h-[40px] md:min-h-[46px]
-          ${disabled ? "bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed" : "border-slate-200 text-slate-700 focus:border-emerald-500 hover:border-emerald-400 cursor-pointer"}
-        `}
-      >
-        <span
-          className={`flex items-center gap-2 line-clamp-2 text-left break-words ${!selectedOption ? "text-slate-400" : "font-semibold"}`}
-        >
-          {icon && <span className="text-emerald-600 shrink-0">{icon}</span>}
-          {selectedOption ? selectedOption.label : placeholder}
-        </span>
-        <ChevronDown
-          size={16}
-          className={`text-slate-400 shrink-0 ml-2 transition-transform duration-300 ${isOpen ? "rotate-180 text-emerald-600" : ""}`}
-        />
-      </button>
-
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            transition={{ duration: 0.2 }}
-            className="absolute z-50 w-full mt-2 bg-white border border-slate-100 rounded-xl shadow-xl max-h-52 md:max-h-60 overflow-y-auto py-1"
-          >
-            {options.map((opt, index) => {
-              // LOGIKA PEMBATAS (DIVIDER)
-              if (opt.isLabel) {
-                return (
-                  <div
-                    key={index}
-                    className="px-4 pt-3 pb-1 text-[10px] font-black text-emerald-700 uppercase tracking-widest bg-slate-50/50 sticky top-0 z-10"
-                  >
-                    {opt.label}
-                  </div>
-                );
-              }
-
-              const isSelected = String(opt.value) === String(value);
-              return (
-                <button
-                  key={index}
-                  type="button"
-                  onClick={() => {
-                    onChange(opt.value);
-                    setIsOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-3 md:px-4 py-2.5 md:py-3 text-sm transition-colors text-left
-        ${isSelected ? "bg-emerald-50 text-emerald-800 font-bold" : "text-slate-600 hover:bg-slate-50 hover:text-emerald-700 font-medium"}
-      `}
-                >
-                  <span className="whitespace-normal break-words pr-2">
-                    {opt.label}
-                  </span>
-                  {isSelected && (
-                    <Check
-                      size={16}
-                      className="text-emerald-600 shrink-0 ml-2"
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
-
-// ==========================================
-// 1.B KOMPONEN PREMIUM MULTI-SELECT CHECKBOX
-// ==========================================
-const PremiumMultiSelect = ({
-  value,
-  onChange,
-  options,
-  placeholder,
-  disabled,
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target))
-        setIsOpen(false);
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const selectedArray = value
-    ? String(value)
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : [];
-
-  const toggleOption = (optValue) => {
-    let newArr = [...selectedArray];
-    if (newArr.includes(optValue)) {
-      newArr = newArr.filter((i) => i !== optValue);
-    } else {
-      newArr.push(optValue);
-    }
-    onChange(newArr.join(", "));
-  };
-
-  return (
-    <div className="relative w-full" ref={dropdownRef}>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setIsOpen(!isOpen)}
-        className={`w-full flex items-center justify-between p-2.5 md:p-3 text-sm bg-white border transition-all rounded-lg md:rounded-xl outline-none shadow-sm min-h-[40px] md:min-h-[46px]
-          ${disabled ? "bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed" : "border-slate-200 text-slate-700 focus:border-emerald-500 hover:border-emerald-400 cursor-pointer"}
-        `}
-      >
-        <span
-          className={`line-clamp-2 text-left break-words pr-2 ${selectedArray.length === 0 ? "text-slate-400" : "font-semibold"}`}
-        >
-          {selectedArray.length === 0
-            ? placeholder
-            : selectedArray.length > 2
-              ? `${selectedArray.length} Kategori Dipilih`
-              : selectedArray.join(", ")}
-        </span>
-        <ChevronDown
-          size={16}
-          className={`text-slate-400 shrink-0 transition-transform duration-300 ${isOpen ? "rotate-180 text-emerald-600" : ""}`}
-        />
-      </button>
-
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            transition={{ duration: 0.2 }}
-            className="absolute z-50 w-full md:w-80 mt-2 bg-white border border-slate-100 rounded-xl shadow-2xl flex flex-col max-h-64 md:max-h-72 overflow-hidden max-w-[90vw]"
-          >
-            <div className="p-2 border-b border-slate-100 bg-slate-50 sticky top-0 flex justify-between items-center z-10">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-2">
-                Pilih Sasaran Kelas
-              </span>
-              {selectedArray.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => onChange("")}
-                  className="text-[10px] font-bold text-red-500 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors"
-                >
-                  Reset
-                </button>
-              )}
-            </div>
-            <div className="overflow-y-auto p-2 scrollbar-hide flex flex-col gap-1">
-              {options.map((opt, index) => {
-                if (opt.isLabel) {
-                  return (
-                    <div
-                      key={index}
-                      className="px-3 pt-3 pb-1 text-[10px] font-black text-emerald-700 uppercase tracking-widest bg-white sticky top-0 z-10"
-                    >
-                      {opt.label}
-                    </div>
-                  );
-                }
-                const isSelected = selectedArray.includes(opt.value);
-                return (
-                  <div
-                    key={index}
-                    onClick={() => toggleOption(opt.value)}
-                    className={`flex items-center gap-3 p-2 md:p-2.5 rounded-lg cursor-pointer transition-all ${isSelected ? "bg-emerald-50 text-emerald-700 font-bold" : "hover:bg-slate-50 text-slate-600 font-medium"}`}
-                  >
-                    {isSelected ? (
-                      <CheckSquare
-                        size={16}
-                        className="text-emerald-500 shrink-0"
-                      />
-                    ) : (
-                      <Square size={16} className="text-slate-300 shrink-0" />
-                    )}
-                    <span className="text-xs md:text-sm whitespace-normal break-words leading-tight">
-                      {opt.label}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
 };
 
 // ==========================================
@@ -343,7 +116,6 @@ TINGKAT_SMA.forEach((t) => {
   });
 });
 
-// Array datar untuk Combobox Autocomplete
 const FLAT_OPSI_KELAS = OPSI_KELAS_LENGKAP.filter((opt) => !opt.isLabel).map(
   (opt) => opt.value,
 );
@@ -354,11 +126,9 @@ const FLAT_OPSI_KELAS = OPSI_KELAS_LENGKAP.filter((opt) => !opt.isLabel).map(
 const OPSI_KELAS_SISWA = [
   { label: "TINGKAT SMP / MTS", isLabel: true },
   ...TINGKAT_SMP.map((t) => ({ label: t, value: t })),
-
   { label: "SMA / MA / SMK", isLabel: true },
 ];
 
-// Looping untuk memasukkan kelas spesifik SMA
 TINGKAT_SMA.forEach((t) => {
   JURUSAN_SMA.forEach((j) => {
     for (let i = 1; i <= MAKSIMAL_ROMBEL; i++) {
@@ -468,12 +238,7 @@ const TAB_CONFIG = {
         sortable: true,
         filterable: true,
       },
-      {
-        key: "guru_pengampu",
-        label: "Guru",
-        sortable: true,
-        filterable: true,
-      },
+      { key: "guru_pengampu", label: "Guru", sortable: true, filterable: true },
     ],
   },
   settings: {
@@ -482,12 +247,7 @@ const TAB_CONFIG = {
     subtitle: "Pengaturan Global Aplikasi CBT",
     columns: [
       { key: "id", label: "ID", isNumber: true, sortable: true },
-      {
-        key: "kunci",
-        label: "Pengaturan",
-        sortable: true,
-        filterable: true,
-      },
+      { key: "kunci", label: "Pengaturan", sortable: true, filterable: true },
       { key: "nilai", label: "Isi / Keterangan", sortable: true },
     ],
   },
@@ -502,7 +262,6 @@ const MENU_ITEMS = [
 
 // ==========================================
 // KOMPONEN INLINE EDIT (GOOGLE SHEETS STYLE)
-// Mendukung Teks, Angka, Dropdown, Kalender, dan Autocomplete!
 // ==========================================
 const EditableCell = ({ item, column, onSave }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -565,7 +324,6 @@ const EditableCell = ({ item, column, onSave }) => {
         >
           <option value="">Pilih...</option>
           {column.options.map((opt, i) => {
-            // Jika opsi berupa Objek (Seperti daftar Kelas yang memiliki pembatas)
             if (typeof opt === "object" && opt !== null) {
               if (opt.isLabel) {
                 return (
@@ -584,8 +342,6 @@ const EditableCell = ({ item, column, onSave }) => {
                 </option>
               );
             }
-
-            // Jika opsi berupa teks biasa (Seperti Role, Status, DAN MODE SOAL)
             return (
               <option key={`str-${i}`} value={opt}>
                 {opt}
@@ -648,7 +404,6 @@ const EditableCell = ({ item, column, onSave }) => {
     );
   }
 
-  // Tampilan Default
   return (
     <div
       onClick={() => setIsEditing(true)}
@@ -672,7 +427,6 @@ const EditableCell = ({ item, column, onSave }) => {
 const AdminDashboard = () => {
   const [tab, setTab] = useState("siswa");
 
-  // STATE CACHE GLOBAL
   const [allData, setAllData] = useState({
     siswa: [],
     jadwal: [],
@@ -701,7 +455,6 @@ const AdminDashboard = () => {
     setCustomAlert({ isOpen: true, type, title, message, onConfirm });
   const closeAlert = () => setCustomAlert({ ...customAlert, isOpen: false });
 
-  // --- FETCH DATA DI AWAL (BACKGROUND) ---
   const fetchAllData = async (isBackground = false) => {
     if (!isBackground) setLoading(true);
     if (isBackground) setIsSyncing(true);
@@ -762,29 +515,18 @@ const AdminDashboard = () => {
   const handleAddNewRow = () => {
     const maxId =
       data.length > 0 ? Math.max(...data.map((d) => parseInt(d.id) || 0)) : 0;
-
-    // Inisialisasi baris baru dengan cerdas berdasarkan tipe kolom
     const newRow = { id: maxId + 1, isNew: true };
-
     currentConfig.columns.forEach((col) => {
-      if (col.key !== "id") {
-        // Jika kolom adalah angka, isi dengan 0, jika tidak string kosong
-        newRow[col.key] = col.isNumber ? 0 : "";
-      }
+      if (col.key !== "id") newRow[col.key] = col.isNumber ? 0 : "";
     });
-
     if (tab === "siswa") newRow.role = "siswa";
     if (tab === "jadwal") {
       newRow.status = "Draft";
-      newRow.acak_soal = "ACAK"; // Bawaan otomatis tersetting acak saat baris baru dibuat
-      newRow.durasi_menit = 90; // Default durasi agar tidak kosong
-      newRow.tanggal = new Date().toISOString().split("T")[0]; // Default tanggal hari ini
+      newRow.acak_soal = "ACAK";
+      newRow.durasi_menit = 90;
+      newRow.tanggal = new Date().toISOString().split("T")[0];
     }
-
-    setAllData((prev) => ({
-      ...prev,
-      [tab]: [...prev[tab], newRow],
-    }));
+    setAllData((prev) => ({ ...prev, [tab]: [...prev[tab], newRow] }));
   };
 
   const handleSaveCell = async (originalId, key, newValue) => {
@@ -794,27 +536,22 @@ const AdminDashboard = () => {
     let parsedValue = newValue;
     const column = currentConfig.columns.find((c) => c.key === key);
 
-    // 1. Parsing Angka secara ketat (Mencegah string kosong masuk ke kolom angka)
     if (column?.isNumber || key === "id") {
       parsedValue =
         key === "id" ? parseInt(newValue) || 0 : parseFloat(newValue) || 0;
     }
 
-    // 2. Validasi Duplikat ID
     if (key === "id" && parsedValue !== originalId) {
       const isDuplicate = data.some((d) => d.id === parsedValue);
-      if (isDuplicate) {
+      if (isDuplicate)
         return showAlert(
           "warning",
           "ID Duplikat",
           `ID #${parsedValue} sudah digunakan.`,
         );
-      }
     }
 
     const updatedItem = { ...item, [key]: parsedValue };
-
-    // 3. Update State Lokal (Optimistic UI)
     setAllData((prev) => ({
       ...prev,
       [tab]: prev[tab].map((d) => (d.id === originalId ? updatedItem : d)),
@@ -822,11 +559,8 @@ const AdminDashboard = () => {
 
     setIsSyncing(true);
     try {
-      // 4. Bersihkan payload dari properti internal (isNew)
       const payload = { ...updatedItem };
       delete payload.isNew;
-
-      // Pastikan kolom angka lainnya di payload tidak berupa string kosong
       currentConfig.columns.forEach((col) => {
         if (col.isNumber && typeof payload[col.key] === "string") {
           payload[col.key] = parseFloat(payload[col.key]) || 0;
@@ -835,7 +569,6 @@ const AdminDashboard = () => {
 
       if (item.isNew) {
         await api.create(currentConfig.sheet, payload);
-        // Setelah sukses create, hilangkan tanda isNew
         setAllData((prev) => ({
           ...prev,
           [tab]: prev[tab].map((d) =>
@@ -843,12 +576,10 @@ const AdminDashboard = () => {
           ),
         }));
       } else {
-        // Gunakan originalId untuk mencari data, kirim payload untuk update
         await api.update(currentConfig.sheet, originalId, payload);
       }
     } catch (error) {
-      console.error("Autosave Error:", error);
-      refreshCurrentTab(true); // Rollback data dari server jika gagal
+      refreshCurrentTab(true);
       showAlert("danger", "Gagal Menyimpan", error.message);
     } finally {
       setIsSyncing(false);
@@ -864,7 +595,6 @@ const AdminDashboard = () => {
       }));
       return;
     }
-
     showAlert(
       "confirm",
       "Hapus Data?",
@@ -1024,7 +754,7 @@ const AdminDashboard = () => {
       },
     );
   };
-  // FITUR: Toggle Hapus Semua Soal
+
   const deleteAllSetting = allData.settings.find(
     (item) => item.kunci === "Hapus_Semua_Soal",
   );
@@ -1074,11 +804,9 @@ const AdminDashboard = () => {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       `}</style>
-      {/* BISA SCROLL */}
+
       <div className="space-y-6 max-w-7xl mx-auto pb-24 relative">
-        {/* BAGIAN ATAS MOBILE */}
         <div className="md:hidden flex flex-col gap-4 px-2 pt-2">
-          {/* Header Mobile */}
           <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-5 text-white shadow-lg relative overflow-hidden">
             <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
             <div className="flex justify-between items-center relative z-10">
@@ -1119,7 +847,6 @@ const AdminDashboard = () => {
             </div>
           </div>
 
-          {/* Menus Mobile */}
           <div className="grid grid-cols-4 gap-2">
             {MENU_ITEMS.map((menu) => {
               const Icon = menu.icon;
@@ -1138,7 +865,6 @@ const AdminDashboard = () => {
             })}
           </div>
 
-          {/* Aksi Mobile */}
           <div className="flex flex-col gap-2">
             <button
               onClick={() => (window.location.href = "/ujian-dashboard")}
@@ -1202,9 +928,6 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* ============================================================== */}
-        {/* LIST DATA MOBILE (FLEX-1, SCROLLABLE) */}
-        {/* ============================================================== */}
         <div className="md:hidden flex flex-col flex-1 min-h-0 bg-white border border-slate-200 rounded-[1.5rem] shadow-sm overflow-hidden mx-2 mb-2">
           <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-slate-100">
             {loading && data.length === 0 ? (
@@ -1268,7 +991,6 @@ const AdminDashboard = () => {
                           <EditableCell
                             item={item}
                             column={
-                              // Logika integrasi: Jika sedang di tab jadwal dan kolomnya mapel, tarik data dari allData.mapel
                               col.key === "mapel" && tab === "jadwal"
                                 ? {
                                     ...col,
@@ -1304,9 +1026,6 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* ============================================================== */}
-        {/* BAGIAN ATAS DESKTOP (SHRINK-0) */}
-        {/* ============================================================== */}
         <header className="hidden md:flex shrink-0 relative flex-col md:flex-row justify-between items-start md:items-center p-6 md:p-8 rounded-[2rem] shadow-sm border border-emerald-100/50 gap-4 overflow-hidden bg-gradient-to-br from-emerald-50 to-teal-100 z-0">
           <div className="absolute -top-20 -left-10 w-72 h-72 bg-white/40 rounded-full -z-10 blur-xl"></div>
           <div className="absolute -bottom-20 right-10 w-80 h-80 bg-emerald-200/30 rounded-full -z-10 blur-xl"></div>
@@ -1357,7 +1076,6 @@ const AdminDashboard = () => {
                 </button>
               </div>
             )}
-            {/* TOMBOL PINTU MASUK KELAS VIRTUAL ADMIN */}
             <button
               onClick={() => (window.location.href = "/ujian-dashboard")}
               className="w-full md:w-auto bg-indigo-600 text-white px-6 py-3.5 rounded-2xl font-bold shadow-xl shadow-indigo-500/30 flex items-center justify-center gap-2 hover:scale-105 active:scale-95 transition-all text-sm border border-indigo-400 z-10"
@@ -1374,7 +1092,6 @@ const AdminDashboard = () => {
           </div>
         </header>
 
-        {/* Toolbar & Stats Desktop (Shrink-0) */}
         <div className="hidden md:flex shrink-0 flex-col xl:flex-row gap-4">
           <Card className="p-6 bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 shadow-xl min-w-[200px] shrink-0 rounded-[2rem] relative overflow-hidden flex flex-col justify-center">
             <div className="absolute top-0 right-0 p-4 opacity-10">
@@ -1440,9 +1157,6 @@ const AdminDashboard = () => {
           </Card>
         </div>
 
-        {/* ========================================================= */}
-        {/* TAMPILAN TABEL INLINE EDIT (DESKTOP - FLEX 1 SCROLLABLE) */}
-        {/* ========================================================= */}
         <Card className="hidden md:flex flex-col flex-1 min-h-0 border border-slate-200 shadow-xl shadow-slate-200/40 bg-white rounded-[2rem] overflow-hidden relative">
           <div className="flex-1 overflow-auto w-full relative custom-scrollbar">
             <table className="w-full text-left text-sm whitespace-nowrap border-collapse min-w-max">
@@ -1456,7 +1170,6 @@ const AdminDashboard = () => {
                       : isName
                         ? { position: "sticky", left: "80px", zIndex: 30 }
                         : {};
-
                     return (
                       <th
                         key={col.key}
@@ -1515,7 +1228,7 @@ const AdminDashboard = () => {
                       <RefreshCw
                         className="animate-spin mx-auto text-emerald-500 mb-4"
                         size={32}
-                      />
+                      />{" "}
                       Memuat Data...
                     </td>
                   </tr>
@@ -1542,7 +1255,6 @@ const AdminDashboard = () => {
                           : isName
                             ? { position: "sticky", left: "80px", zIndex: 10 }
                             : {};
-
                         return (
                           <td
                             key={col.key}
@@ -1552,7 +1264,6 @@ const AdminDashboard = () => {
                             <EditableCell
                               item={item}
                               column={
-                                // Logika integrasi: Jika sedang di tab jadwal dan kolomnya mapel, tarik data dari allData.mapel
                                 col.key === "mapel" && tab === "jadwal"
                                   ? {
                                       ...col,
@@ -1598,7 +1309,6 @@ const AdminDashboard = () => {
           </div>
         </Card>
 
-        {/* MODAL CUSTOM ALERT & CONFIRM */}
         <AnimatePresence>
           {customAlert.isOpen && (
             <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/80">
@@ -1651,7 +1361,6 @@ const AdminDashboard = () => {
           )}
         </AnimatePresence>
 
-        {/* LACI FILTER & SORT MOBILE */}
         <AnimatePresence>
           {isMobileFilterOpen && (
             <div className="fixed inset-0 z-[95] flex items-end justify-center bg-slate-900/80 md:hidden">
@@ -1680,7 +1389,6 @@ const AdminDashboard = () => {
                 </div>
 
                 <div className="overflow-y-auto flex-1 scrollbar-hide pb-6 space-y-6">
-                  {/* Bagian Urutkan (Sort) */}
                   <div className="space-y-3">
                     <label className="text-[11px] font-bold uppercase tracking-widest text-emerald-600 border-b border-emerald-100 pb-2 flex block">
                       Urutkan Berdasarkan
@@ -1706,7 +1414,6 @@ const AdminDashboard = () => {
                     </div>
                   </div>
 
-                  {/* Bagian Filter */}
                   {currentConfig.columns.some(
                     (c) => c.filterable || c.key === "kelas",
                   ) && (
