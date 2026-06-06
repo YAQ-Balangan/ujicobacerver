@@ -1,5 +1,5 @@
 // src/pages/LoginPage.jsx
-// KODE SESUDAH
+// KODE SESUDAH (Full Code tinggal salin)
 import React, { useState, useContext } from "react";
 import {
   User,
@@ -36,12 +36,11 @@ const LoginPage = () => {
   };
 
   return (
-    // Background menggunakan warna solid (slate-100) yang membaur sempurna dengan bayangan
     <div className="bg-slate-100 flex items-center justify-center p-6 font-sans w-full min-h-screen">
-      {/* FORM CARD - Menggunakan efek Neumorphism (bayangan ganda terang dan gelap) */}
-      <div className="w-full max-w-[360px] sm:max-w-[380px] bg-slate-100 p-8 sm:p-10 rounded-[2.5rem] shadow-[12px_12px_24px_#cbd5e1,-12px_-12px_24px_#ffffff] relative z-10 transition-all duration-300">
+      {/* FORM CARD - Pop It Container */}
+      <div className="w-full max-w-[360px] sm:max-w-[380px] bg-slate-100 p-8 sm:p-10 rounded-[2.5rem] shadow-[14px_14px_28px_#cbd5e1,-14px_-14px_28px_#ffffff] relative z-10">
         <div className="flex flex-col items-center mb-8 text-center">
-          {/* Logo container dibuat agak menonjol juga */}
+          {/* Logo Container 3D Timbul */}
           <div className="w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center mb-5 rounded-2xl shadow-[6px_6px_12px_#cbd5e1,-6px_-6px_12px_#ffffff] bg-slate-100 p-3">
             <img
               src={logoTADBIRA}
@@ -69,6 +68,7 @@ const LoginPage = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
+          {/* INPUT USERNAME */}
           <div className="space-y-2">
             <label className="text-[10px] font-bold uppercase text-slate-500 ml-2 tracking-wider">
               Username
@@ -77,11 +77,10 @@ const LoginPage = () => {
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
                 <User size={18} />
               </div>
-              {/* Efek INSET shadow pada input agar terlihat seperti cekungan ke dalam */}
               <input
                 type="text"
                 required
-                className="w-full pl-12 pr-4 py-3.5 bg-slate-100 rounded-2xl font-semibold text-sm text-slate-700 outline-none shadow-[inset_5px_5px_10px_#cbd5e1,inset_-5px_-5px_10px_#ffffff] focus:shadow-[inset_2px_2px_5px_#cbd5e1,inset_-2px_-2px_5px_#ffffff] transition-all duration-300 placeholder:text-slate-400"
+                className="w-full pl-12 pr-4 py-3.5 bg-slate-100 rounded-2xl font-semibold text-sm text-slate-700 outline-none shadow-[inset_5px_5px_10px_#cbd5e1,inset_-5px_-5px_10px_#ffffff] focus:shadow-[inset_3px_3px_6px_#cbd5e1,inset_-3px_-3px_6px_#ffffff] transition-all duration-300 placeholder:text-slate-400"
                 placeholder="Masukkan Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -89,39 +88,41 @@ const LoginPage = () => {
             </div>
           </div>
 
+          {/* INPUT PASSWORD */}
           <div className="space-y-2">
             <label className="text-[10px] font-bold uppercase text-slate-500 ml-2 tracking-wider">
               Password
             </label>
-            <div className="relative">
+            <div className="relative flex items-center">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
                 <Lock size={18} />
               </div>
-              {/* Efek INSET yang sama untuk form password */}
               <input
                 type={showPassword ? "text" : "password"}
                 required
-                className="w-full pl-12 pr-12 py-3.5 bg-slate-100 rounded-2xl font-semibold text-sm text-slate-700 outline-none shadow-[inset_5px_5px_10px_#cbd5e1,inset_-5px_-5px_10px_#ffffff] focus:shadow-[inset_2px_2px_5px_#cbd5e1,inset_-2px_-2px_5px_#ffffff] transition-all duration-300 placeholder:text-slate-400"
+                className="w-full pl-12 pr-14 py-3.5 bg-slate-100 rounded-2xl font-semibold text-sm text-slate-700 outline-none shadow-[inset_5px_5px_10px_#cbd5e1,inset_-5px_-5px_10px_#ffffff] focus:shadow-[inset_3px_3px_6px_#cbd5e1,inset_-3px_-3px_6px_#ffffff] transition-all duration-300 placeholder:text-slate-400"
                 placeholder="Masukkan Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
+
+              {/* TOMBOL MATA (POP IT STYLE) - Sekarang berbentuk bulatan timbul yang bisa "dipop" */}
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                className="absolute right-2 w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 hover:text-emerald-500 shadow-[3px_3px_6px_#cbd5e1,-3px_-3px_6px_#ffffff] active:shadow-[inset_3px_3px_6px_#cbd5e1,inset_-3px_-3px_6px_#ffffff] active:translate-y-[1px] transition-all duration-150 outline-none"
               >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
           </div>
 
+          {/* TOMBOL MASUK (POP IT STYLE) */}
           <div className="pt-6">
-            {/* Tombol yang memiliki efek 3D timbul, lalu ketika di klik (active) efeknya berbalik ke dalam seakan ditekan */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-emerald-500 text-white font-black py-4 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-[6px_6px_12px_#cbd5e1,-6px_-6px_12px_#ffffff] hover:bg-emerald-400 active:shadow-[inset_4px_4px_8px_#047857,inset_-4px_-4px_8px_#34d399] active:translate-y-[2px] transition-all duration-200 uppercase tracking-[0.2em] disabled:opacity-70 disabled:cursor-not-allowed"
+              className="w-full bg-emerald-500 text-white font-black py-4 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-[8px_8px_16px_#cbd5e1,-8px_-8px_16px_#ffffff] hover:bg-emerald-600 active:shadow-[inset_6px_6px_12px_#047857,inset_-6px_-6px_12px_#34d399] active:translate-y-[3px] transition-all duration-150 uppercase tracking-[0.2em] disabled:opacity-70 disabled:cursor-not-allowed outline-none"
             >
               {loading ? (
                 <Loader2 size={18} className="animate-spin" />
