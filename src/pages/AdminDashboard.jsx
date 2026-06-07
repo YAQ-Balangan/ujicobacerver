@@ -22,8 +22,12 @@ import {
   Unlock,
   ListChecks,
   MonitorSmartphone,
+  Copy, // <-- Tambahan
+  Printer, // <-- Tambahan
+  Files, // <-- Tambahan
+  Share2, // <-- Tambahan
 } from "lucide-react";
-import { api } from "../api/api";
+import { api, supabase } from "../api/api";
 import Dashboard from "../components/layout/Dashboard";
 // === KITA IMPOR KOMPONEN UI DARI Ui.jsx ===
 import {
@@ -456,9 +460,33 @@ const AdminDashboard = () => {
   const closeAlert = () => setCustomAlert({ ...customAlert, isOpen: false });
 
   const fetchAllData = async (isBackground = false) => {
-    if (!isBackground) setLoading(true);
-    if (isBackground) setIsSyncing(true);
+    // =======================================================
+    // 1. FASE OFFLINE CACHE (TAMPIL INSTAN 0 DETIK)
+    // =======================================================
+    if (!isBackground) {
+      setLoading(true);
+      const cachedSiswa = localStorage.getItem("tadbira_admin_siswa");
+      const cachedJadwal = localStorage.getItem("tadbira_admin_jadwal");
+      const cachedMapel = localStorage.getItem("tadbira_admin_mapel");
+      const cachedSettings = localStorage.getItem("tadbira_admin_settings");
 
+      if (cachedSiswa || cachedJadwal || cachedMapel || cachedSettings) {
+        setAllData((prev) => ({
+          ...prev,
+          siswa: cachedSiswa ? JSON.parse(cachedSiswa) : [],
+          jadwal: cachedJadwal ? JSON.parse(cachedJadwal) : [],
+          mapel: cachedMapel ? JSON.parse(cachedMapel) : [],
+          settings: cachedSettings ? JSON.parse(cachedSettings) : [],
+        }));
+      }
+      setLoading(false); // Matikan loading karena data lokal sudah tampil!
+    } else {
+      setIsSyncing(true);
+    }
+
+    // =======================================================
+    // 2. FASE ONLINE (SINKRONISASI DATA SERVER)
+    // =======================================================
     try {
       const [resSiswa, resJadwal, resMapel, resSettings] = await Promise.all([
         api.read(TAB_CONFIG.siswa.sheet),
@@ -467,21 +495,40 @@ const AdminDashboard = () => {
         api.read(TAB_CONFIG.settings.sheet),
       ]);
 
-      setAllData((prev) => {
-        const newData = {
-          siswa: resSiswa || [],
-          jadwal: resJadwal || [],
-          mapel: resMapel || [],
-          settings: resSettings || [],
-        };
-        return JSON.stringify(prev) !== JSON.stringify(newData)
-          ? newData
-          : prev;
-      });
+      const newData = {
+        siswa: resSiswa || [],
+        jadwal: resJadwal || [],
+        mapel: resMapel || [],
+        settings: resSettings || [],
+      };
+
+      setAllData((prev) =>
+        JSON.stringify(prev) !== JSON.stringify(newData) ? newData : prev,
+      );
+
+      // SIMPAN KE BRANKAS LOKAL
+      localStorage.setItem(
+        "tadbira_admin_siswa",
+        JSON.stringify(newData.siswa),
+      );
+      localStorage.setItem(
+        "tadbira_admin_jadwal",
+        JSON.stringify(newData.jadwal),
+      );
+      localStorage.setItem(
+        "tadbira_admin_mapel",
+        JSON.stringify(newData.mapel),
+      );
+      localStorage.setItem(
+        "tadbira_admin_settings",
+        JSON.stringify(newData.settings),
+      );
     } catch (error) {
-      console.error("Gagal menarik semua data:", error);
+      console.warn(
+        "Gagal menarik data terbaru, menggunakan mode offline:",
+        error,
+      );
     } finally {
-      setLoading(false);
       setIsSyncing(false);
     }
   };
@@ -492,6 +539,27 @@ const AdminDashboard = () => {
     if (isBackground) setIsSyncing(true);
 
     try {
+      const refreshCurrentTab = async (isBackground = false) => {
+        if (!currentConfig) return;
+        if (!isBackground) setLoading(true);
+        if (isBackground) setIsSyncing(true);
+
+        try {
+          const result = await api.read(currentConfig.sheet);
+          setAllData((prev) => ({ ...prev, [tab]: result || [] }));
+
+          // Update cache untuk tab yang sedang dibuka agar selalu fresh
+          localStorage.setItem(
+            `tadbira_admin_${tab}`,
+            JSON.stringify(result || []),
+          );
+        } catch (error) {
+          console.warn(`Gagal merefresh data ${tab}:`, error);
+        } finally {
+          setLoading(false);
+          setIsSyncing(false);
+        }
+      };
       const result = await api.read(currentConfig.sheet);
       setAllData((prev) => ({ ...prev, [tab]: result || [] }));
     } catch (error) {
@@ -505,7 +573,46 @@ const AdminDashboard = () => {
   useEffect(() => {
     fetchAllData(false);
   }, []);
+  useEffect(() => {
+    fetchAllData(false);
 
+    // MESIN REALTIME: Memantau perubahan dari admin lain tanpa perlu klik refresh
+    const channel = supabase
+      .channel("admin-dashboard-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "Users" },
+        () => {
+          if (tab === "siswa") refreshCurrentTab(true);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "Jadwal" },
+        () => {
+          if (tab === "jadwal") refreshCurrentTab(true);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "Mapel" },
+        () => {
+          if (tab === "mapel") refreshCurrentTab(true);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "Settings" },
+        () => {
+          if (tab === "settings") refreshCurrentTab(true);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [tab]); // React akan meng-update listener saat admin berpindah tab
   useEffect(() => {
     setSearch("");
     setFilters({});
@@ -796,6 +903,110 @@ const AdminDashboard = () => {
     );
   };
 
+  // =================================================================
+  // FITUR BARU 1: DUPLIKAT DATA (Jadwal / Mapel / Siswa) Biar Sat Set
+  // =================================================================
+  const handleDuplicateRow = async (item) => {
+    setLoading(true);
+    try {
+      const maxId =
+        data.length > 0 ? Math.max(...data.map((d) => parseInt(d.id) || 0)) : 0;
+      const newItem = { ...item, id: maxId + 1 };
+      delete newItem.isNew;
+
+      // Beri tanda (Copy) agar tidak bingung
+      if (tab === "jadwal") newItem.nama_ujian = `${newItem.nama_ujian} (Copy)`;
+      if (tab === "mapel") newItem.nama_mapel = `${newItem.nama_mapel} (Copy)`;
+      if (tab === "siswa") newItem.username = `${newItem.username}_copy`;
+
+      await api.create(currentConfig.sheet, newItem);
+      await refreshCurrentTab(false);
+      showAlert(
+        "success",
+        "Berhasil Duplikat",
+        "Data berhasil digandakan tanpa harus mengetik dari awal!",
+      );
+    } catch (e) {
+      showAlert("danger", "Gagal Duplikat", e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // =================================================================
+  // FITUR BARU 2: CETAK KARTU LOGIN (Otomatis Layout Kertas)
+  // =================================================================
+  const handleCetakKartu = () => {
+    if (processedData.length === 0)
+      return showAlert(
+        "warning",
+        "Kosong",
+        "Tidak ada data siswa untuk dicetak.",
+      );
+
+    let html = `<!DOCTYPE html><html><head><title>Kartu Ujian TADBIRA</title><style>
+      body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+      .card { border: 2px dashed #000; padding: 20px; border-radius: 15px; position: relative; }
+      .title { text-align: center; font-weight: 900; font-size: 18px; margin: 0 0 15px 0; border-bottom: 3px solid #10b981; padding-bottom: 10px; }
+      .row { margin-bottom: 8px; font-size: 14px; color: #333; }
+      .bold { font-weight: 900; color: #000; }
+      .print-btn { display: block; margin: 0 auto 30px auto; padding: 15px 30px; background: #10b981; color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; }
+      @media print { body { padding: 0; } .print-btn { display: none; } .card { page-break-inside: avoid; } }
+    </style></head><body>
+    <button class="print-btn" onclick="window.print()">🖨️ Cetak / Simpan PDF Sekarang</button>
+    <div class="grid">`;
+
+    processedData.forEach((s) => {
+      if (s.role === "siswa" || s.role === "murid") {
+        html += `<div class="card">
+          <h3 class="title">KARTU LOGIN UJIAN</h3>
+          <!-- Menggunakan tabel agar titik dua sejajar rapi -->
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px; color: #333;">
+            <tr>
+              <td style="padding: 4px 0; width: 100px;">Nama</td>
+              <td style="padding: 4px 0; width: 10px;">:</td>
+              <td style="padding: 4px 0;" class="bold">${s.nama || "-"}</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0;">Kelas</td>
+              <td style="padding: 4px 0;">:</td>
+              <td style="padding: 4px 0;" class="bold">${s.kelas || "-"}</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; padding-top: 15px;">Username</td>
+              <td style="padding: 4px 0; padding-top: 15px;">:</td>
+              <td style="padding: 4px 0; padding-top: 15px;" class="bold" style="font-size:18px;">${s.username || "-"}</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0;">Password</td>
+              <td style="padding: 4px 0;">:</td>
+              <td style="padding: 4px 0;" class="bold" style="font-size:18px;">${s.password || "-"}</td>
+            </tr>
+          </table>
+        </div>`;
+      }
+    });
+
+    html += `</div></body></html>`;
+    const printWin = window.open("", "", "width=900,height=700");
+    printWin.document.write(html);
+    printWin.document.close();
+  };
+
+  // =================================================================
+  // FITUR BARU 3: AUTO COPY BROADCAST KE WHATSAPP
+  // =================================================================
+  const handleCopyBroadcast = (jadwal) => {
+    const msg = `*📢 INFORMASI UJIAN TADBIRA*\n\nMapel : ${jadwal.mapel}\nUjian : ${jadwal.nama_ujian}\nKelas : ${jadwal.kelas}\nTanggal : ${formatTanggal(jadwal.tanggal)}\nDurasi : ${jadwal.durasi_menit} Menit\n\n🔑 *TOKEN UJIAN : ${jadwal.token}*\n\nSilakan login menggunakan Username dan Password masing-masing tepat pada waktunya. Semoga sukses!`;
+    navigator.clipboard.writeText(msg);
+    showAlert(
+      "success",
+      "Tersalin ke Clipboard!",
+      "Pesan WA beserta Token berhasil disalin. Silakan Paste di Grup WA Siswa.",
+    );
+  };
+
   return (
     <Dashboard menu={MENU_ITEMS} active={tab} setActive={setTab}>
       <style>{`
@@ -1083,6 +1294,14 @@ const AdminDashboard = () => {
               <MonitorSmartphone size={20} className="animate-pulse" /> Live
               Ujian
             </button>
+            {tab === "siswa" && (
+              <button
+                onClick={handleCetakKartu}
+                className="w-full md:w-auto bg-blue-600 text-white px-6 py-3.5 rounded-2xl font-bold shadow-xl shadow-blue-500/30 flex items-center justify-center gap-2 hover:scale-105 active:scale-95 transition-all text-sm border border-blue-400 z-10"
+              >
+                <Printer size={20} /> Cetak Kartu Login
+              </button>
+            )}
             <button
               onClick={handleAddNewRow}
               className="w-full md:w-auto bg-gradient-to-r from-emerald-600 to-emerald-500 text-white px-6 py-3.5 rounded-2xl font-bold shadow-xl shadow-emerald-500/30 flex items-center justify-center gap-2 hover:scale-105 active:scale-95 transition-all text-sm border border-emerald-400 z-10"
@@ -1213,8 +1432,8 @@ const AdminDashboard = () => {
                       </th>
                     );
                   })}
-                  <th className="px-6 py-5 text-center bg-slate-50 border-b-2 border-slate-200 text-slate-500 font-bold text-xs uppercase tracking-wider w-[80px]">
-                    Hapus
+                  <th className="px-6 py-5 text-center bg-slate-50 border-b-2 border-slate-200 text-slate-500 font-bold text-xs uppercase tracking-wider w-[140px]">
+                    Aksi
                   </th>
                 </tr>
               </thead>
@@ -1293,13 +1512,33 @@ const AdminDashboard = () => {
                         );
                       })}
                       <td className="px-4 py-3 text-center whitespace-nowrap bg-inherit">
-                        <button
-                          onClick={() => confirmDelete(item.id)}
-                          className="p-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-500 hover:text-white transition-colors shadow-sm"
-                          title="Hapus Baris"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <div className="flex justify-center items-center gap-2">
+                          {tab === "jadwal" && !item.isNew && (
+                            <button
+                              onClick={() => handleCopyBroadcast(item)}
+                              className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-600 rounded-lg hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
+                              title="Salin Broadcast WA (Jadwal & Token)"
+                            >
+                              <Share2 size={16} />
+                            </button>
+                          )}
+                          {!item.isNew && tab !== "settings" && (
+                            <button
+                              onClick={() => handleDuplicateRow(item)}
+                              className="p-2 bg-blue-50 border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-500 hover:text-white transition-all shadow-sm"
+                              title="Duplikat Data Ini (Clone)"
+                            >
+                              <Files size={16} />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => confirmDelete(item.id)}
+                            className="p-2 bg-red-50 border border-red-200 text-red-600 rounded-lg hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                            title="Hapus Baris"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

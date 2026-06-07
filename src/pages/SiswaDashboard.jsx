@@ -31,7 +31,7 @@ import {
   BookMarked,
 } from "lucide-react";
 import { AuthContext } from "../context/AuthContext";
-import { api } from "../api/api";
+import { api, supabase } from "../api/api";
 import Dashboard from "../components/layout/Dashboard";
 import { Card, Badge } from "../components/ui/Ui";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
@@ -349,35 +349,38 @@ const SiswaDashboard = () => {
   const userJurusan = userParts[1] || "";
   const userTingkatJurusan = `${userTingkat} ${userJurusan}`.trim();
 
-  // 1. POLLING DATA JADWAL, NILAI, & SETTINGS ANTI-CHEAT
+  // 1. SISTEM REALTIME DATA JADWAL, NILAI, & SETTINGS ANTI-CHEAT (MIGRASI REALTIME)
   useEffect(() => {
     const fetchData = async (isBackground = false) => {
-      if (!isBackground) setLoading(true);
+      // =======================================================
+      // 1. FASE OFFLINE / CACHE LOKAL (TAMPIL INSTAN 0 DETIK)
+      // =======================================================
+      if (!isBackground) {
+        // Bongkar brankas memori HP siswa berdasarkan username mereka
+        const cachedJadwal = localStorage.getItem('tadbira_siswa_jadwal');
+        const cachedNilai = localStorage.getItem(`tadbira_siswa_nilai_${getVal(user, "Username")}`);
+        
+        if (cachedJadwal) setExams(JSON.parse(cachedJadwal));
+        if (cachedNilai) setMyResults(JSON.parse(cachedNilai));
+        
+        // Langsung matikan loading agar jadwal dan nilai instan muncul di HP!
+        setLoading(false);
+      }
+
+      // =======================================================
+      // 2. FASE ONLINE (SINKRONISASI DIAM-DIAM DARI SERVER)
+      // =======================================================
       try {
         try {
           const settingsRes = await api.read("Settings");
           if (settingsRes && Array.isArray(settingsRes)) {
-            const acSetting = settingsRes.find(
-              (s) => String(s.kunci).toUpperCase() === "MODE_UJIAN",
-            );
-            setIsAntiCheatActive(
-              acSetting
-                ? String(acSetting.nilai).toUpperCase() !== "OFF"
-                : true,
-            );
+            const acSetting = settingsRes.find((s) => String(s.kunci).toUpperCase() === "MODE_UJIAN");
+            setIsAntiCheatActive(acSetting ? String(acSetting.nilai).toUpperCase() !== "OFF" : true);
 
-            const appOnlySetting = settingsRes.find(
-              (s) => String(s.kunci).toUpperCase() === "MODE_APLIKASI",
-            );
-            if (
-              appOnlySetting &&
-              String(appOnlySetting.nilai).toUpperCase() === "ON"
-            ) {
-              if (!isWebView()) {
-                setIsAppBlocked(true);
-              } else {
-                setIsAppBlocked(false);
-              }
+            const appOnlySetting = settingsRes.find((s) => String(s.kunci).toUpperCase() === "MODE_APLIKASI");
+            if (appOnlySetting && String(appOnlySetting.nilai).toUpperCase() === "ON") {
+              if (!isWebView()) setIsAppBlocked(true);
+              else setIsAppBlocked(false);
             } else {
               setIsAppBlocked(false);
             }
@@ -391,32 +394,24 @@ const SiswaDashboard = () => {
               });
             }
 
-            const acakSetting = settingsRes.find(
-              (s) => String(s.kunci).toUpperCase() === "ACAK_SOAL",
-            );
-            setIsAcakSoalActive(
-              acakSetting
-                ? String(acakSetting.nilai).toUpperCase() !== "OFF"
-                : true,
-            );
+            const acakSetting = settingsRes.find((s) => String(s.kunci).toUpperCase() === "ACAK_SOAL");
+            setIsAcakSoalActive(acakSetting ? String(acakSetting.nilai).toUpperCase() !== "OFF" : true);
           }
         } catch (setErr) {
           console.warn("Gagal menarik konfigurasi pengaturan admin:", setErr);
         }
-        if (activeExamRef.current) {
-          return;
-        }
+
+        if (activeExamRef.current) return; // Abaikan tarik jadwal kalau siswa sedang mengerjakan soal
+
         const jadwalRes = await api.read("Jadwal");
         const userName = String(getVal(user, "Nama") || "");
         const finalNilai = await api.getNilaiSiswa(userName);
+        
         let finalJadwal = [];
         if (jadwalRes && jadwalRes.length > 0) {
           finalJadwal = jadwalRes.filter((j) => {
-            const jadwalKelasRaw = String(
-              getVal(j, "Kelas") || "",
-            ).toUpperCase();
-            if (jadwalKelasRaw === "" || jadwalKelasRaw.includes("SEMUA"))
-              return true;
+            const jadwalKelasRaw = String(getVal(j, "Kelas") || "").toUpperCase();
+            if (jadwalKelasRaw === "" || jadwalKelasRaw.includes("SEMUA")) return true;
             const targetArray = jadwalKelasRaw.split(",").map((t) => t.trim());
             return targetArray.some(
               (target) =>
@@ -428,27 +423,80 @@ const SiswaDashboard = () => {
           });
         }
 
-        setExams((prev) =>
-          JSON.stringify(prev) !== JSON.stringify(finalJadwal)
-            ? finalJadwal
-            : prev,
-        );
-        setMyResults((prev) =>
-          JSON.stringify(prev) !== JSON.stringify(finalNilai)
-            ? finalNilai
-            : prev,
-        );
+        // Perbarui layar hanya jika ada data jadwal/nilai baru dari server
+        setExams((prev) => JSON.stringify(prev) !== JSON.stringify(finalJadwal) ? finalJadwal : prev);
+        setMyResults((prev) => JSON.stringify(prev) !== JSON.stringify(finalNilai) ? finalNilai : prev);
+
+        // SIMPAN KE BRANKAS LOKAL UNTUK BUKA APLIKASI BESOK / NANTI
+        localStorage.setItem('tadbira_siswa_jadwal', JSON.stringify(finalJadwal));
+        localStorage.setItem(`tadbira_siswa_nilai_${getVal(user, "Username")}`, JSON.stringify(finalNilai));
+
       } catch (err) {
-        if (!isBackground) setErrorMsg("Gagal terhubung ke database ujian.");
+        // Jangan tampilkan pesan error merah jika siswa sudah punya data offline di HP-nya
+        if (!isBackground && !localStorage.getItem('tadbira_siswa_jadwal')) {
+            setErrorMsg("Gagal terhubung ke database ujian dan tidak ada data offline.");
+        }
       } finally {
         if (!isBackground) setLoading(false);
       }
     };
 
+    // Ambil data pertama kali saat aplikasi dibuka
     fetchData(false);
-    // Diubah menjadi 5 menit (300000 ms) agar hemat kuota request
-    const intervalId = setInterval(() => fetchData(true), 300000);
-    return () => clearInterval(intervalId);
+
+    // Buka Saluran Realtime Supabase (Hanya terima data jika di server ada perubahan)
+    const channel = supabase
+      .channel("tadbira-realtime-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "Settings" },
+        () => {
+          fetchData(true);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "Jadwal" },
+        () => {
+          fetchData(true);
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "sesi_ujian",
+          filter: `username_siswa=eq.${getVal(user, "Username")}`,
+        },
+        (payload) => {
+          // Ini menggantikan fungsi Polling Buka Kunci dari Guru secara instan!
+          const sesiBaru = payload.new;
+          if (sesiBaru && sesiBaru.status === "ACTIVE") {
+            setIsLocked(false);
+            isLockedRef.current = false;
+            setTimeLeft(timeLeftRef.current);
+
+            // Otomatis paksa fullscreen kembali setelah dibuka kunci
+            try {
+              const docElm = document.documentElement;
+              if (docElm.requestFullscreen)
+                docElm.requestFullscreen().catch(() => {});
+            } catch (e) {}
+
+            showAlert(
+              "success",
+              "Kunci Dibuka",
+              "Pengawas telah memaafkan dan membuka kunci ujian Anda. DILARANG KELUAR APLIKASI LAGI!",
+            );
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user, userKelasFull, userTingkat, userJurusan, userTingkatJurusan]);
 
   // ==============================================================
@@ -619,46 +667,72 @@ const SiswaDashboard = () => {
     };
   }, [user]);
 
-  // 3. POLLING BUKA KUNCI DARI GURU
+  // 3. POLLING BUKA KUNCI DARI GURU (NON-AKTIF: SUDAH DIGANTI REALTIME SUPABASE DI LANGKAH 2)
   useEffect(() => {
-    if (!activeExam || !isLocked) return;
-    // Diubah menjadi 15 detik untuk siswa yang sedang terkunci
-    const interval = setInterval(async () => {
-      const username = getVal(user, "Username");
-      const examId = getVal(activeExam, "ID");
+    // Sengaja dikosongkan agar menghemat kuota egress data server & HP siswa
+  }, []);
+
+  // --- MESIN SINKRONISASI LATAR BELAKANG (OFFLINE-FIRST MECHANISM) ---
+  const triggerBackgroundSync = useCallback(async () => {
+    if (!navigator.onLine) return; // Jika HP sedang offline, batalkan pengiriman
+
+    const queueStr = localStorage.getItem("tadbira_sync_queue");
+    if (!queueStr) return;
+
+    let syncQueue = JSON.parse(queueStr);
+    if (syncQueue.length === 0) return;
+
+    let remainingQueue = [...syncQueue];
+
+    for (let i = 0; i < syncQueue.length; i++) {
+      const item = syncQueue[i];
       try {
-        const sesi = await api.getSesi(username, examId);
-        if (sesi && sesi.status === "ACTIVE") {
-          setIsLocked(false);
-          isLockedRef.current = false;
-          setTimeLeft(timeLeftRef.current);
+        // Kirim nilai hasil ujian ke server
+        await api.create("Nilai", item.nilaiData);
+        // Hapus jejak sesi ujian siswa di server
+        await api.deleteSesi(item.username, item.idUjian);
 
-          // PAKSA FULLSCREEN LAGI
-          try {
-            const docElm = document.documentElement;
-            if (docElm.requestFullscreen) {
-              docElm.requestFullscreen().catch((err) => console.log(err));
-            } else if (docElm.webkitRequestFullscreen) {
-              docElm.webkitRequestFullscreen();
-            } else if (docElm.msRequestFullscreen) {
-              docElm.msRequestFullscreen();
-            }
-          } catch (error) {
-            console.warn("Fullscreen auto-resume tidak didukung.");
-          }
-
-          showAlert(
-            "success",
-            "Kunci Dibuka",
-            "Pengawas telah memaafkan dan membuka kunci ujian Anda. DILARANG KELUAR APLIKASI LAGI!",
-          );
-        }
-      } catch (err) {
-        console.error(err);
+        // Jika sukses dikirim, hapus item ini dari antrean lokal HP
+        remainingQueue = remainingQueue.filter(
+          (q) => q.idUjian !== item.idUjian,
+        );
+        localStorage.setItem(
+          "tadbira_sync_queue",
+          JSON.stringify(remainingQueue),
+        );
+        console.log(
+          "Sinkronisasi otomatis latar belakang berhasil untuk:",
+          item.nilaiData.mapel,
+        );
+      } catch (error) {
+        console.warn(
+          "Gagal sinkron data ke server, akan dicoba otomatis nanti:",
+          error,
+        );
+        break; // Hentikan loop sementara jika server down agar antrean tidak rusak
       }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [activeExam, isLocked, user, showAlert]);
+    }
+  }, []);
+
+  // Pasang pemantau sinyal internet HP secara otomatis
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false);
+      triggerBackgroundSync(); // Sinyal HP kembali ada? Langsung nembak kirim nilai!
+    };
+    const handleOffline = () => setIsOffline(true);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    // Jalankan pengecekan antrean setiap kali halaman dibuka
+    triggerBackgroundSync();
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [triggerBackgroundSync]);
 
   // 4. MEMULAI UJIAN
   const handleStartExam = async (exam) => {
@@ -766,6 +840,17 @@ const SiswaDashboard = () => {
       let finalAnswers = {};
       let finalTimeLeft = examDurasi * 60;
 
+      // AMBIL HISTORY JAWABAN DARI MEMORI INTERNAL HP TERLEBIH DAHULU (OFFLINE-FIRST SAFETY)
+      const localSavedAnswersStr = localStorage.getItem(
+        `jawaban_${getVal(user, "Username")}_${examId}`,
+      );
+      let localSavedAnswers = null;
+      if (localSavedAnswersStr) {
+        try {
+          localSavedAnswers = JSON.parse(localSavedAnswersStr);
+        } catch (e) {}
+      }
+
       if (serverSession) {
         let parsedJawaban = {};
         try {
@@ -777,11 +862,22 @@ const SiswaDashboard = () => {
           console.warn("Gagal membaca history jawaban", e);
         }
 
-        finalAnswers = parsedJawaban;
+        // Jika data di HP siswa ada dan lebih banyak isinya daripada di server, pakai data HP
+        if (
+          localSavedAnswers &&
+          Object.keys(localSavedAnswers).length >=
+            Object.keys(parsedJawaban).length
+        ) {
+          finalAnswers = localSavedAnswers;
+        } else {
+          finalAnswers = parsedJawaban;
+        }
+
         finalTimeLeft = serverSession.sisa_waktu || examDurasi * 60;
         setPelanggaran(serverSession.pelanggaran || 0);
         setIsLocked(serverSession.status === "LOCKED");
       } else {
+        finalAnswers = localSavedAnswers || {};
         setPelanggaran(0);
         setIsLocked(false);
       }
@@ -813,11 +909,11 @@ const SiswaDashboard = () => {
     }
   };
 
-  // 5. KALKULASI SKOR & SUBMIT (FINAL FIX)
+  // 5. KALKULASI SKOR & SUBMIT (OFFLINE-FIRST)
   const executeEndExam = async (isForced, forcedStatus = "Selesai") => {
     setIsSubmitting(true);
 
-    // TAMBAHAN 1: Hapus timer save yang masih nyangkut di background agar tidak jadi sesi hantu
+    // Hapus timer save yang masih nyangkut di background agar tidak membocorkan memori
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
@@ -859,17 +955,16 @@ const SiswaDashboard = () => {
     let salahCount = totalSoal - benarCount;
 
     try {
-      // BIKIN ID SUPER AMAN UNTUK INT8 SUPABASE (Kombinasi Tanggal/Jam + Angka Acak)
-      // Menghasilkan angka unik yang PASTI muat di kolom int8 dan bebas dari bentrokan
+      // Bikin ID unik untuk baris database Supabase
       const amanId = Number(
         Date.now().toString() +
-          Math.floor(Math.random() * 1000)
+          Math.floor(Math.random() * 100)
             .toString()
-            .padStart(3, "0"),
+            .padStart(2, "0"),
       );
 
       const dataNilai = {
-        id: amanId, // ID Unik Mandiri tanpa pusing setting Auto Increment Supabase
+        id: amanId,
         nama_siswa: getVal(user, "Nama"),
         kelas: getVal(user, "Kelas"),
         mapel: getVal(activeExamRef.current, "Mapel"),
@@ -881,27 +976,24 @@ const SiswaDashboard = () => {
         detail_jawaban: JSON.stringify(detailJawabanArray),
       };
 
-      // 1. Simpan nilai ke Supabase
-      await api.create("Nilai", dataNilai);
+      // 1. OPTIMISTIC UI: LANGSUNG MASUKKAN NILAI KE LAYAR HP SISWA (Tanpa nunggu server!)
+      setMyResults((prev) => [dataNilai, ...prev]);
 
-      // TAMBAHAN 2: Tarik ulang data nilai terbaru secara instan agar langsung muncul di halaman Hasil Ujian
-      try {
-        const finalNilai = await api.getNilaiSiswa(getVal(user, "Username"));
-        setMyResults(finalNilai);
-      } catch (e) {
-        console.warn("Gagal tarik nilai instan", e);
-      }
+      // 2. BERSIHKAN JAWABAN DARI MEMORI INTERNAL HP SISWA
+      const idUjian = getVal(activeExamRef.current, "ID");
+      localStorage.removeItem(`jawaban_${getVal(user, "Username")}_${idUjian}`);
 
-      // 2. Hapus sesi (Dibungkus try-catch pisah, agar jika gagal, nilai TETAP TERSIMPAN)
-      try {
-        await api.deleteSesi(
-          getVal(user, "Username"),
-          getVal(activeExamRef.current, "ID"),
-        );
-      } catch (errSesi) {
-        console.warn("Sesi gagal dihapus, tapi nilai sudah aman:", errSesi);
-      }
+      // 3. MASUKKAN KE ANTREAN SINKRONISASI LOKAL HP SISWA
+      const queueStr = localStorage.getItem("tadbira_sync_queue") || "[]";
+      let syncQueue = JSON.parse(queueStr);
+      syncQueue.push({
+        username: getVal(user, "Username"),
+        idUjian: idUjian,
+        nilaiData: dataNilai,
+      });
+      localStorage.setItem("tadbira_sync_queue", JSON.stringify(syncQueue));
 
+      // 4. RESET STATE INTERFACE UJIAN & PINDAH KE TAB NILAI
       setIsSubmitting(false);
       setActiveExam(null);
       setAnswers({});
@@ -910,14 +1002,10 @@ const SiswaDashboard = () => {
       setIsMobileDrawerOpen(false);
       setActiveTab("nilai");
 
-      // ==========================================
-      // [KODE BARU] AUTO REFRESH SETELAH 3 DETIK
-      // ==========================================
-      setTimeout(() => {
-        window.location.reload();
-      }, 5000); // 5000 milidetik = 5 detik
-      // ==========================================
+      // 5. PICU SINKRONISASI KE SERVER CLOUD
+      triggerBackgroundSync();
 
+      // 6. KELUAR FULLSCREEN & MUNCULKAN NOTIF
       try {
         if (
           document.fullscreenElement ||
@@ -925,7 +1013,7 @@ const SiswaDashboard = () => {
           document.msFullscreenElement
         ) {
           if (document.exitFullscreen) {
-            document.exitFullscreen().catch((err) => console.log(err));
+            document.exitFullscreen().catch(() => {});
           } else if (document.webkitExitFullscreen) {
             document.webkitExitFullscreen();
           } else if (document.msExitFullscreen) {
@@ -940,26 +1028,27 @@ const SiswaDashboard = () => {
         showAlert(
           "danger",
           "Diskualifikasi!",
-          "Ujian Anda dihentikan paksa karena telah keluar dari halaman ujian berulang kali. Halaman akan dimuat ulang...",
+          "Ujian Anda dihentikan paksa. Nilai Anda sedang diproses di latar belakang.",
         );
       } else if (isForced) {
         showAlert(
           "info",
           "Waktu Habis!",
-          "Waktu ujian Anda telah habis dan jawaban berhasil disimpan. Halaman akan dimuat ulang dalam 3 detik...",
+          "Waktu ujian habis. Nilai Anda aman terekam di HP dan sedang disinkronkan ke server.",
         );
       } else {
         showAlert(
           "success",
           "Ujian Selesai",
-          "Berhasil disubmit! Silahkan periksa halaman nilai Anda.",
+          "Berhasil dikumpulkan! Nilai Anda aman terekam di HP dan sedang disinkronkan ke server.",
         );
       }
     } catch (err) {
       showAlert(
         "danger",
-        "Gagal Mengirim",
-        "Sistem error: " + (err.message || "Pastikan internet stabil."),
+        "Gagal Memproses",
+        "Sistem error lokal: " +
+          (err.message || "Pastikan memori HP tidak penuh."),
       );
       setIsSubmitting(false);
     }
@@ -1023,17 +1112,17 @@ const SiswaDashboard = () => {
   }
 
   // ==============================================================
-  // TAMPILAN LOCK SCREEN (PELANGGARAN PERTAMA)
+  // TAMPILAN LOCK SCREEN (PELANGGARAN PERTAMA) + FITUR PIN OFFLINE
   // ==============================================================
   if (isLocked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white flex-col p-6 z-[9999] fixed inset-0 select-none">
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white flex-col p-6 z-[9999] fixed inset-0 select-none overflow-y-auto">
         <div className="hidden">
           <ExamTimer
             initialTime={timeLeft}
             timeRef={timeLeftRef}
             onTick={(newTime) => {
-              if (activeExamRef.current) {
+              if (activeExamRef.current && navigator.onLine) {
                 api.saveSesi(
                   getVal(user, "Username"),
                   getVal(activeExamRef.current, "ID"),
@@ -1048,7 +1137,7 @@ const SiswaDashboard = () => {
           />
         </div>
 
-        <Lock size={80} className="text-red-500 mb-6 animate-pulse" />
+        <Lock size={80} className="text-red-500 mb-6 animate-pulse mt-10" />
         <h1 className="text-3xl md:text-5xl font-black mb-3 text-center tracking-tight">
           UJIAN TERKUNCI
         </h1>
@@ -1062,17 +1151,44 @@ const SiswaDashboard = () => {
           <strong className="text-amber-400 font-black tracking-widest text-xs uppercase animate-pulse block mb-4">
             — WAKTU UJIAN ANDA TERUS BERJALAN —
           </strong>
-          <strong className="text-red-400">Peringatan Keras:</strong> Jika Anda
-          mengulanginya lagi, ujian akan langsung dihentikan dan Anda dinyatakan{" "}
-          <strong className="text-red-500 underline uppercase">
-            Diskualifikasi
-          </strong>
-          .
         </p>
-        <div className="flex gap-3 text-slate-400 font-bold text-xs uppercase tracking-widest items-center bg-slate-800 border border-slate-700 px-6 py-3.5 rounded-2xl shadow-lg">
+
+        {/* Indikator Menunggu Sinyal Server */}
+        <div className="flex gap-3 text-slate-400 font-bold text-xs uppercase tracking-widest items-center bg-slate-800 border border-slate-700 px-6 py-3.5 rounded-2xl shadow-lg mb-8">
           <RefreshCw className="animate-spin text-amber-500" size={18} />{" "}
-          Menunggu Persetujuan Guru...
+          Menunggu Persetujuan Online...
         </div>
+
+        {/* FITUR BARU: PIN BUKA KUNCI DARURAT (OFFLINE) UNTUK GURU */}
+        <div className="w-full max-w-xs mt-4 pt-6 border-t border-slate-800/50 flex flex-col items-center">
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-3 text-center">
+            Mode Darurat Gangguan Server<br/>(Hanya Diisi Oleh Pengawas)
+          </p>
+          <input 
+            type="password" 
+            placeholder="PIN PENGAWAS"
+            maxLength={6}
+            className="w-full text-center bg-slate-800 border border-slate-600 text-white font-black tracking-[0.5em] p-3 rounded-xl focus:outline-none focus:border-emerald-500 placeholder:tracking-normal placeholder:font-medium placeholder:text-slate-600"
+            onChange={(e) => {
+              // Ganti "123456" dengan PIN rahasia yang Anda sepakati dengan guru-guru
+              if (e.target.value === "123456") {
+                setIsLocked(false);
+                isLockedRef.current = false;
+                setPelanggaran(0); // Reset pelanggaran agar dimaafkan sepenuhnya
+                pelanggaranRef.current = 0;
+                
+                // Paksa kembali ke Fullscreen
+                try {
+                  const docElm = document.documentElement;
+                  if (docElm.requestFullscreen) docElm.requestFullscreen().catch(() => {});
+                } catch (err) {}
+
+                showAlert("success", "Kunci Dibuka Darurat", "Pengawas telah membuka kunci ujian Anda secara manual. Lanjutkan ujian Anda!");
+              }
+            }}
+          />
+        </div>
+
       </div>
     );
   }
@@ -1342,32 +1458,39 @@ const SiswaDashboard = () => {
                           <button
                             key={opt}
                             onClick={() => {
-                              // 1. Catat jawaban di memori lokal agar layar instan berubah
+                              // 1. Catat jawaban di memori layar (UI) agar respon instan 0 detik
                               const newAnswers = {
                                 ...answers,
                                 [currentSoalId]: opt,
                               };
                               setAnswers(newAnswers);
 
-                              // 2. Hapus hitung mundur yang lama jika siswa klik ganti opsi dengan cepat
+                              // 2. AMANKAN DI PENYIMPANAN INTERNAL HP (Siswa Bebas Drama Gagal Simpan!)
+                              const idUjian = getVal(activeExam, "ID");
+                              localStorage.setItem(
+                                `jawaban_${getVal(user, "Username")}_${idUjian}`,
+                                JSON.stringify(newAnswers),
+                              );
+
+                              // 3. Jeda hitung mundur pengiriman cadangan ke cloud server
                               if (saveTimeoutRef.current) {
                                 clearTimeout(saveTimeoutRef.current);
                               }
 
-                              // 3. Jeda diubah menjadi 5 detik. Perubahan di layar tetap instan,
-                              // tapi pengiriman ke server ditunda agar bisa ditimpa jika siswa berubah pikiran.
                               saveTimeoutRef.current = setTimeout(() => {
-                                // TAMBAHKAN BARIS INI: Jangan nge-save kalau siswa sedang proses submit
                                 if (isSubmittingRef.current) return;
 
-                                api.saveSesi(
-                                  getVal(user, "Username"),
-                                  getVal(activeExam, "ID"),
-                                  newAnswers,
-                                  timeLeftRef.current,
-                                  pelanggaranRef.current,
-                                  isLockedRef.current ? "LOCKED" : "ACTIVE",
-                                );
+                                // Cadangan ke server HANYA dikirim jika HP mendapati koneksi internet stabil
+                                if (navigator.onLine) {
+                                  api.saveSesi(
+                                    getVal(user, "Username"),
+                                    idUjian,
+                                    newAnswers,
+                                    timeLeftRef.current,
+                                    pelanggaranRef.current,
+                                    isLockedRef.current ? "LOCKED" : "ACTIVE",
+                                  );
+                                }
                               }, 5000);
                             }}
                             className={`w-full text-left px-5 py-4 md:px-6 md:py-5 rounded-[1.5rem] border-2 transition-all flex items-start gap-4 md:gap-5 group relative overflow-hidden outline-none ${

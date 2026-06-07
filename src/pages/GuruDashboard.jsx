@@ -50,9 +50,14 @@ import {
   Bot,
   ScanSearch,
 } from "lucide-react";
-import { api } from "../api/api";
+import { api, supabase } from "../api/api";
 import Dashboard from "../components/layout/Dashboard";
-import { Card, Badge, PremiumSelect, PremiumMultiSelect } from "../components/ui/Ui";
+import {
+  Card,
+  Badge,
+  PremiumSelect,
+  PremiumMultiSelect,
+} from "../components/ui/Ui";
 import { AuthContext } from "../context/AuthContext";
 import SSmode from "../components/modals/SSmode";
 
@@ -414,7 +419,7 @@ const GuruDashboard = () => {
     });
   };
 
-  const [sesiUjianData, setSesiUjianData] = useState([]); 
+  const [sesiUjianData, setSesiUjianData] = useState([]);
 
   const IMGBB_API_KEY = "db28c000ce57b260d7d09cb4c18790e0";
   const [uploadingImgId, setUploadingImgId] = useState(null);
@@ -650,9 +655,39 @@ const GuruDashboard = () => {
   };
 
   const fetchAllData = async (isBackground = false) => {
-    if (!isBackground) setLoading(true);
-    if (isBackground) setIsSyncing(true);
+    // =======================================================
+    // 1. FASE OFFLINE / CACHE (TAMPIL INSTAN DARI MEMORI)
+    // =======================================================
+    if (!isBackground) {
+      setLoading(true);
 
+      // Coba bongkar brankas memori lokal laptop/HP guru
+      const cachedSoal = localStorage.getItem("tadbira_cache_soal");
+      const cachedNilai = localStorage.getItem("tadbira_cache_nilai");
+      const cachedSettings = localStorage.getItem("tadbira_cache_settings");
+      const cachedSesi = localStorage.getItem("tadbira_cache_sesi");
+
+      // Jika ada tabungan data, langsung tampilkan ke layar agar tidak loading lama
+      if (cachedSoal || cachedNilai || cachedSettings) {
+        setAllData((prev) => ({
+          ...prev,
+          soal: cachedSoal ? JSON.parse(cachedSoal) : [],
+          nilai: cachedNilai ? JSON.parse(cachedNilai) : [],
+          settings: cachedSettings ? JSON.parse(cachedSettings) : [],
+        }));
+      }
+      if (cachedSesi) {
+        setSesiUjianData(JSON.parse(cachedSesi));
+      }
+
+      setLoading(false); // Matikan loading karena layar sudah langsung terisi
+    } else {
+      setIsSyncing(true); // Nyalakan indikator awan (sinkronisasi background)
+    }
+
+    // =======================================================
+    // 2. FASE ONLINE (SINKRONISASI DATA TERBARU DARI SERVER)
+    // =======================================================
     try {
       const [resSoal, resNilai, lockedRes, resSettings] = await Promise.all([
         api.read(TAB_CONFIG.soal.sheet),
@@ -661,21 +696,40 @@ const GuruDashboard = () => {
         api.read("Settings").catch(() => []),
       ]);
 
+      const newData = {
+        soal: resSoal || [],
+        nilai: resNilai || [],
+        settings: resSettings || [],
+      };
+
+      // Update layar dengan data yang paling baru dari server
       setAllData((prev) => {
-        const newData = {
-          soal: resSoal || [],
-          nilai: resNilai || [],
-          settings: resSettings || [],
-        };
         return JSON.stringify(prev) !== JSON.stringify(newData)
           ? newData
           : prev;
       });
       setSesiUjianData(lockedRes || []);
+
+      // Simpan data paling baru ini ke brankas lokal untuk dipakai besok/nanti!
+      localStorage.setItem("tadbira_cache_soal", JSON.stringify(newData.soal));
+      localStorage.setItem(
+        "tadbira_cache_nilai",
+        JSON.stringify(newData.nilai),
+      );
+      localStorage.setItem(
+        "tadbira_cache_settings",
+        JSON.stringify(newData.settings),
+      );
+      localStorage.setItem(
+        "tadbira_cache_sesi",
+        JSON.stringify(lockedRes || []),
+      );
     } catch (error) {
-      console.error("Gagal menarik semua data:", error);
+      console.warn(
+        "Gagal sinkron data terbaru, menggunakan data lokal (Mode Offline):",
+        error,
+      );
     } finally {
-      setLoading(false);
       setIsSyncing(false);
     }
   };
@@ -707,16 +761,22 @@ const GuruDashboard = () => {
         api.getSesiTerkunci().catch(() => []),
       ]);
 
+      const finalNilai = resNilai || [];
+      const finalLocked = lockedRes || [];
+
       setAllData((prev) => {
         const newData = {
-          ...prev, 
-          nilai: resNilai || [],
+          ...prev,
+          nilai: finalNilai,
         };
-        return JSON.stringify(prev) !== JSON.stringify(newData)
-          ? newData
-          : prev;
+        return JSON.stringify(prev) !== JSON.stringify(newData) ? newData : prev;
       });
-      setSesiUjianData(lockedRes || []);
+      setSesiUjianData(finalLocked);
+
+      // Simpan juga ke brankas lokal, agar jika guru refresh halaman, datanya tidak mundur ke belakang
+      localStorage.setItem('tadbira_cache_nilai', JSON.stringify(finalNilai));
+      localStorage.setItem('tadbira_cache_sesi', JSON.stringify(finalLocked));
+
     } catch (error) {
       console.error("Gagal refresh live monitoring:", error);
     } finally {
@@ -725,6 +785,7 @@ const GuruDashboard = () => {
   };
 
   useEffect(() => {
+    // Tarik data penuh satu kali saja saat halaman pertama kali dibuka
     fetchAllData(false);
 
     const fetchCount = async () => {
@@ -733,12 +794,39 @@ const GuruDashboard = () => {
     };
     fetchCount();
 
-    const intervalId = setInterval(() => {
-      fetchLiveMonitoring();
-      fetchCount();
-    }, 30000);
+    // MESIN REALTIME: Hanya bereaksi jika ada perubahan di server
+    const channel = supabase
+      .channel("guru-live-monitoring")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "Nilai" },
+        () => {
+          // Bereaksi HANYA jika ada siswa yang baru saja mengumpulkan ujian
+          fetchLiveMonitoring();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "sesi_ujian" },
+        () => {
+          // Bereaksi HANYA jika ada siswa yang terkunci (pelanggaran)
+          fetchLiveMonitoring();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "Soal" },
+        () => {
+          // Update jumlah soal jika guru lain baru saja menambah soal
+          fetchCount();
+        },
+      )
+      .subscribe();
 
-    return () => clearInterval(intervalId);
+    return () => {
+      // Bersihkan saluran jika guru pindah halaman
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {
@@ -1072,8 +1160,8 @@ const GuruDashboard = () => {
     const lines = bulkText.split("\n");
     const rawBlocks = [];
     let currentBlock = [];
-    let phase = "q"; 
-    let optionsSeen = new Set(); 
+    let phase = "q";
+    let optionsSeen = new Set();
 
     for (let i = 0; i < lines.length; i++) {
       let line = lines[i];
@@ -1102,7 +1190,7 @@ const GuruDashboard = () => {
           if (!isLastOpt && !isLastKunci) {
             poppedLines.unshift(currentBlock.pop());
           } else {
-            break; 
+            break;
           }
         }
 
@@ -1457,7 +1545,7 @@ Patuhi aturan berikut secara ketat:
           console.log(
             `[AI Fallback] Hore! Berhasil menggunakan API Key ke-${i + 1}`,
           );
-          break; 
+          break;
         } catch (loopError) {
           console.warn(
             `[AI Fallback] API Key ke-${i + 1} Limit/Gagal:`,
@@ -1495,7 +1583,7 @@ Patuhi aturan berikut secara ketat:
           ...item,
           poin: parseFloat(String(item.poin).replace(",", ".")) || 0,
         };
-        delete newItem.id; 
+        delete newItem.id;
         return newItem;
       });
 
@@ -1698,14 +1786,14 @@ Patuhi aturan berikut secara ketat:
         grouped[key] = { nama_siswa: row.nama_siswa, kelas: row.kelas };
       if (grouped[key][mapelKey] === undefined)
         grouped[key][mapelKey] = parseFloat(row.skor) || 0;
-    }); 
+    });
 
     let filteredMapels = mapels;
     if (filters.mapel) {
       filteredMapels = mapels.filter(
         (m) => String(m).toLowerCase() === String(filters.mapel).toLowerCase(),
       );
-    } 
+    }
 
     const finalData = Object.values(grouped).map((student) => {
       let total = 0,
@@ -1718,7 +1806,7 @@ Patuhi aturan berikut secara ketat:
       });
       student.RataRata = count > 0 ? (total / count).toFixed(1) : 0;
       return student;
-    }); 
+    });
 
     let filteredPivot = finalData;
     if (search)
@@ -1734,7 +1822,7 @@ Patuhi aturan berikut secara ketat:
       filteredPivot = filteredPivot.filter(
         (s) => s[filters.mapel] !== undefined,
       );
-    } 
+    }
 
     filteredPivot.sort((a, b) => {
       const classCmp = String(a.kelas).localeCompare(String(b.kelas));
@@ -1775,7 +1863,7 @@ Patuhi aturan berikut secara ketat:
   }, [pivotNilaiData, tab, nilaiViewMode]);
 
   const handleExport = async (type) => {
-    setIsExportMenuOpen(false); 
+    setIsExportMenuOpen(false);
     let dataToExport = [];
     let mapelsToExport = [];
     let isLogMode = tab === "nilai" && nilaiViewMode === "log";

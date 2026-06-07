@@ -25,7 +25,9 @@ import {
   Maximize,
   Info,
   ArrowLeft,
-  Users, // <-- Icon baru untuk Auto-Assign
+  Users,
+  Lock,
+  Unlock,
 } from "lucide-react";
 import Dashboard from "../components/layout/Dashboard";
 import { api, supabase } from "../api/api";
@@ -249,9 +251,33 @@ const UjianDashboard = () => {
   const boardHeight = rows * 140 + (rows - 1) * 24 + 160;
 
   // =================================================================================
-  // FASE 1: FETCH DATA STATIS (Hanya 1 Kali)
+  // FASE 1: FETCH DATA STATIS (OFFLINE CACHE 0 DETIK)
   // =================================================================================
   const fetchBaseData = async () => {
+    // 1. TAMPILKAN INSTAN DARI BRANKAS LOKAL
+    const cachedUsers = localStorage.getItem("tadbira_admin_users");
+    const cachedJadwal = localStorage.getItem("tadbira_admin_jadwalMap");
+    const cachedLayout = localStorage.getItem("tadbira_admin_layout");
+
+    if (cachedUsers && cachedJadwal && cachedLayout) {
+      baseDataRef.current = {
+        users: JSON.parse(cachedUsers),
+        soal: [],
+        jadwalMap: JSON.parse(cachedJadwal),
+      };
+      setDbUsers(JSON.parse(cachedUsers));
+      const parsedLayout = JSON.parse(cachedLayout);
+      setLayoutConfig(parsedLayout.data);
+      setConfigId(parsedLayout.id);
+      setActiveRoom((curr) =>
+        !curr && Object.keys(parsedLayout.data).length > 0
+          ? Object.keys(parsedLayout.data)[0]
+          : curr,
+      );
+      setIsInitialLoad(false); // Matikan loading layar utama seketika!
+    }
+
+    // 2. SINKRONISASI DIAM-DIAM KE SERVER
     try {
       const [resSettings, resUsers, resJadwal, resSoal] = await Promise.all([
         api.read("Settings").catch(() => []),
@@ -283,19 +309,23 @@ const UjianDashboard = () => {
       setDbUsers(siswaOnly);
 
       const jadwalMap = {};
-      if (resJadwal) {
-        resJadwal.forEach((jadwal) => {
-          jadwalMap[String(jadwal.id)] = String(
-            jadwal.mapel || jadwal.Mapel || "Ujian",
-          );
+      if (resJadwal)
+        resJadwal.forEach((j) => {
+          jadwalMap[String(j.id)] = String(j.mapel || j.Mapel || "Ujian");
         });
-      }
 
       baseDataRef.current = {
         users: siswaOnly,
         soal: resSoal || [],
         jadwalMap,
       };
+
+      // SIMPAN KE BRANKAS LOKAL
+      localStorage.setItem("tadbira_admin_users", JSON.stringify(siswaOnly));
+      localStorage.setItem(
+        "tadbira_admin_jadwalMap",
+        JSON.stringify(jadwalMap),
+      );
 
       const denahSetting = (resSettings || []).find(
         (s) => String(s.kunci || "").toLowerCase() === "denah_kelas",
@@ -305,54 +335,61 @@ const UjianDashboard = () => {
         try {
           const parsed = JSON.parse(denahSetting.nilai);
           setLayoutConfig(parsed);
-          setActiveRoom((currentRoom) => {
-            if (!currentRoom && Object.keys(parsed).length > 0)
-              return Object.keys(parsed)[0];
-            return currentRoom;
-          });
+          setActiveRoom((curr) =>
+            !curr && Object.keys(parsed).length > 0
+              ? Object.keys(parsed)[0]
+              : curr,
+          );
+          localStorage.setItem(
+            "tadbira_admin_layout",
+            JSON.stringify({ id: denahSetting.id, data: parsed }),
+          );
         } catch (e) {}
       }
     } catch (error) {
-      console.error("Gagal menarik Base Data", error);
+      console.warn("Offline Mode Terdeteksi, menggunakan Cache");
     } finally {
       setIsInitialLoad(false);
     }
   };
 
   // =================================================================================
-  // FASE 2: FETCH LIVE DATA (Ringan, Realtime CCTV)
+  // FASE 2: FETCH LIVE DATA (CACHE + SINKRONISASI RINGAN)
   // =================================================================================
   const fetchLiveStatus = async () => {
     setIsSyncing(true);
+
+    // Tarik data sementara dari HP biar nggak kosong melompong
+    const cachedLive = localStorage.getItem("tadbira_admin_liveData");
+    if (cachedLive && studentsData.length === 0)
+      setStudentsData(JSON.parse(cachedLive));
+
     try {
-      const fetchSesi = supabase
-        .from("sesi_ujian")
-        .select(
-          "id_sesi, id_ujian, username_siswa, jawaban_sementara, status, updated_at",
-        )
-        .gte(
-          "updated_at",
-          new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
-        )
-        .then(({ data }) => data || [])
-        .catch(() => []);
-
-      const fetchNilai = supabase
-        .from("Nilai")
-        .select(
-          "id, id_ujian, username, nama_siswa, mapel, total_soal, status, created_at",
-        )
-        .gte(
-          "created_at",
-          new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
-        )
-        .then(({ data }) => data || [])
-        .catch(() => []);
-
       const [resNilai, resSesiUjian] = await Promise.all([
-        fetchNilai,
-        fetchSesi,
+        supabase
+          .from("Nilai")
+          .select(
+            "id, id_ujian, username, nama_siswa, mapel, total_soal, status, created_at",
+          )
+          .gte(
+            "created_at",
+            new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+          )
+          .then(({ data }) => data || [])
+          .catch(() => []),
+        supabase
+          .from("sesi_ujian")
+          .select(
+            "id_sesi, id_ujian, username_siswa, jawaban_sementara, status, updated_at",
+          )
+          .gte(
+            "updated_at",
+            new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+          )
+          .then(({ data }) => data || [])
+          .catch(() => []),
       ]);
+
       const {
         users: siswaOnly,
         soal: resSoal,
@@ -360,7 +397,6 @@ const UjianDashboard = () => {
       } = baseDataRef.current;
       const allEvents = [];
       const currentTime = Date.now();
-
       const safeGetTime = (dateVal) => {
         if (!dateVal) return 0;
         let cleanDate = String(dateVal).replace(" ", "T");
@@ -368,9 +404,8 @@ const UjianDashboard = () => {
           !cleanDate.includes("Z") &&
           !cleanDate.includes("+") &&
           !cleanDate.includes("-")
-        ) {
+        )
           cleanDate += "Z";
-        }
         const time = new Date(cleanDate).getTime();
         return isNaN(time) ? 0 : time;
       };
@@ -378,58 +413,43 @@ const UjianDashboard = () => {
       const finishedExamsSet = new Set();
 
       (resNilai || []).forEach((nilai) => {
-        const nNama = String(nilai.nama_siswa || nilai.Nama_Siswa || "")
+        const nUsername = String(
+          nilai.username || nilai.Username || nilai.nama_siswa || "",
+        )
           .toLowerCase()
           .trim();
-        const nUsername = String(nilai.username || nilai.Username || nNama)
-          .toLowerCase()
-          .trim();
-
         const userObj = siswaOnly.find(
           (u) =>
             normalizeText(u.username) === nUsername ||
-            normalizeText(u.nama) === nNama,
+            normalizeText(u.nama) === nUsername,
         );
         const userKey = userObj ? normalizeText(userObj.username) : nUsername;
         const idUjian = String(nilai.id_ujian || "");
 
         finishedExamsSet.add(`${userKey}_${idUjian}`);
-
-        const statusVal = String(
-          nilai.status || nilai.Status || "",
-        ).toUpperCase();
-        const isDisqualified =
-          statusVal.includes("DISKUALIFIKASI") || statusVal.includes("DIS");
-
-        const rawTime =
-          nilai.created_at ||
-          nilai.Created_at ||
-          nilai.Created_At ||
-          nilai.updated_at ||
-          nilai.waktu ||
-          null;
-        const dbTime = safeGetTime(rawTime);
-
+        const isDisqualified = String(nilai.status || "")
+          .toUpperCase()
+          .includes("DIS");
         let totalSoal = nilai.total_soal || nilai.Total_Soal;
         if (!totalSoal || totalSoal === "-") {
-          const mapel =
-            nilai.mapel || nilai.Mapel || jadwalMap[idUjian] || "Ujian";
-          totalSoal = getExactTotalSoal(mapel, userObj?.kelas, resSoal || []);
+          totalSoal = getExactTotalSoal(
+            nilai.mapel || jadwalMap[idUjian] || "Ujian",
+            userObj?.kelas,
+            resSoal || [],
+          );
         }
 
         allEvents.push({
           userKey: userKey,
           type: "DONE",
-          timestamp: dbTime,
+          timestamp: safeGetTime(nilai.created_at || nilai.updated_at),
           sortId: parseInt(nilai.id) || 0,
           data: {
             id: `done-${nilai.id}`,
-            username: userObj
-              ? userObj.username
-              : nilai.username || nilai.nama_siswa,
+            username: userObj ? userObj.username : nilai.username,
             id_ujian: idUjian,
-            mapel: nilai.mapel || nilai.Mapel || "Ujian",
-            nama: userObj ? userObj.nama : nilai.nama_siswa || nilai.Nama_Siswa,
+            mapel: nilai.mapel || jadwalMap[idUjian] || "Ujian",
+            nama: userObj ? userObj.nama : nilai.nama_siswa,
             gender: userObj ? userObj.gender : "L",
             dijawab: totalSoal,
             totalSoal: totalSoal,
@@ -442,18 +462,17 @@ const UjianDashboard = () => {
       (resSesiUjian || []).forEach((sesi) => {
         const usernameSesiNormal = normalizeText(sesi.username_siswa);
         const idUjian = String(sesi.id_ujian);
-
         if (finishedExamsSet.has(`${usernameSesiNormal}_${idUjian}`)) return;
 
         const userObj = siswaOnly.find(
           (u) => normalizeText(u.username) === usernameSesiNormal,
         );
-
         let jawaban = {};
         try {
-          if (typeof sesi.jawaban_sementara === "string")
-            jawaban = JSON.parse(sesi.jawaban_sementara);
-          else if (sesi.jawaban_sementara) jawaban = sesi.jawaban_sementara;
+          jawaban =
+            typeof sesi.jawaban_sementara === "string"
+              ? JSON.parse(sesi.jawaban_sementara)
+              : sesi.jawaban_sementara || {};
         } catch (e) {}
 
         const dijawab = Object.keys(jawaban).length;
@@ -464,18 +483,11 @@ const UjianDashboard = () => {
           resSoal || [],
         );
 
-        let percentage =
-          totalSoal > 0
-            ? Math.min(100, Math.round((dijawab / totalSoal) * 100))
-            : 0;
-        const parsedTime = safeGetTime(sesi.updated_at || sesi.created_at);
-        const eventTime = parsedTime > 0 ? parsedTime : currentTime;
-
         allEvents.push({
           userKey: usernameSesiNormal,
           type: "LIVE",
-          timestamp: eventTime,
-          sortId: parseInt(sesi.id_sesi || sesi.id) || 0,
+          timestamp: safeGetTime(sesi.updated_at) || currentTime,
+          sortId: parseInt(sesi.id_sesi) || 0,
           data: {
             id: `live-${sesi.id_sesi}`,
             username: sesi.username_siswa,
@@ -485,7 +497,10 @@ const UjianDashboard = () => {
             gender: userObj ? userObj.gender : "L",
             dijawab: dijawab,
             totalSoal: totalSoal,
-            progress: percentage,
+            progress:
+              totalSoal > 0
+                ? Math.min(100, Math.round((dijawab / totalSoal) * 100))
+                : 0,
             status: sesi.status === "LOCKED" ? "LOCKED" : "WORKING",
           },
         });
@@ -498,23 +513,14 @@ const UjianDashboard = () => {
         return b.sortId - a.sortId;
       });
 
-      const DONE_TIMEOUT_MS = 15 * 60 * 1000;
-      const LIVE_TIMEOUT_MS = 2 * 60 * 60 * 1000;
       const latestEventsMap = {};
-
       allEvents.forEach((evt) => {
         if (!latestEventsMap[evt.userKey]) {
           const age = Math.abs(currentTime - evt.timestamp);
-          const isExpiredDone =
-            evt.type === "DONE" && evt.timestamp > 0 && age > DONE_TIMEOUT_MS;
-          const isExpiredLive =
-            evt.type === "LIVE" && evt.timestamp > 0 && age > LIVE_TIMEOUT_MS;
-
-          if (!isExpiredDone && !isExpiredLive) {
-            latestEventsMap[evt.userKey] = evt.data;
-          } else {
-            latestEventsMap[evt.userKey] = "EXPIRED";
-          }
+          const isExpired =
+            (evt.type === "DONE" && age > 15 * 60 * 1000) ||
+            (evt.type === "LIVE" && age > 2 * 60 * 60 * 1000);
+          latestEventsMap[evt.userKey] = isExpired ? "EXPIRED" : evt.data;
         }
       });
 
@@ -522,8 +528,12 @@ const UjianDashboard = () => {
         (data) => data !== "EXPIRED",
       );
       setStudentsData(liveStudentsList);
+      localStorage.setItem(
+        "tadbira_admin_liveData",
+        JSON.stringify(liveStudentsList),
+      ); // Amankan di HP
     } catch (error) {
-      console.error(error);
+      console.warn(error);
     } finally {
       setTimeout(() => setIsSyncing(false), 500);
     }
@@ -533,23 +543,33 @@ const UjianDashboard = () => {
     fetchBaseData();
   }, []);
 
+  // MESIN REALTIME SUPABASE (Gantikan Polling Boros)
   useEffect(() => {
-    let isMounted = true;
-    let timeoutId = null;
+    if (isInitialLoad || activeTab !== "live") return;
 
-    const loopFetch = async () => {
-      if (activeTab === "live" && isMounted && !isInitialLoad) {
-        await fetchLiveStatus();
-      }
-      if (isMounted) {
-        // Diubah menjadi 60 detik (1 menit) untuk meringankan query riwayat ujian
-        timeoutId = setTimeout(loopFetch, 60000);
-      }
-    };
-    loopFetch();
+    fetchLiveStatus(); // Tarik satu kali saja
+
+    // Cuma mendengarkan sinyal perubahan (0 MB Kuota tersedot jika kelas hening)
+    const channel = supabase
+      .channel("admin-live-monitoring")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "sesi_ujian" },
+        () => {
+          fetchLiveStatus(); // Tarik ulang hanya saat ada perubahan di HP Siswa!
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "Nilai" },
+        () => {
+          fetchLiveStatus();
+        },
+      )
+      .subscribe();
+
     return () => {
-      isMounted = false;
-      clearTimeout(timeoutId);
+      supabase.removeChannel(channel);
     };
   }, [activeTab, isInitialLoad]);
 
@@ -826,7 +846,8 @@ const UjianDashboard = () => {
 
   const handleUnlockStudent = async (username, examId) => {
     try {
-      await api.updateSesiStatus(username, examId, "ACTIVE", 1);
+      // Buka kunci dan kembalikan pelanggaran ke 0 agar siswa bersih kembali
+      await api.updateSesiStatus(username, examId, "ACTIVE", 0);
       setStudentsData((prev) =>
         prev.map((s) =>
           s.username === username ? { ...s, status: "WORKING" } : s,
@@ -835,7 +856,7 @@ const UjianDashboard = () => {
       showAlert(
         "success",
         "Kunci Terbuka",
-        `Akses ujian untuk siswa bersangkutan berhasil dipulihkan.`,
+        `Akses ujian berhasil dipulihkan paksa.`,
       );
     } catch (err) {
       showAlert(
@@ -844,6 +865,43 @@ const UjianDashboard = () => {
         "Pastikan koneksi internet Anda stabil.",
       );
     }
+  };
+
+  // FITUR BARU: KUNCI PAKSA SISWA OLEH ADMIN
+  const handleForceLock = async (username, examId) => {
+    showAlert(
+      "confirm",
+      "Kunci Paksa Siswa?",
+      "Anda yakin ingin mengunci layar siswa ini secara paksa? Layar mereka akan langsung menjadi merah.",
+      async () => {
+        try {
+          // Status diubah menjadi LOCKED dan pelanggaran dibuat 3 agar terdeteksi merah
+          await api.updateSesiStatus(username, examId, "LOCKED", 3);
+          setStudentsData((prev) =>
+            prev.map((s) =>
+              s.username === username ? { ...s, status: "LOCKED" } : s,
+            ),
+          );
+          closeAlert();
+          // Timeout agar alert sebelumnya tertutup dulu
+          setTimeout(
+            () =>
+              showAlert(
+                "success",
+                "Siswa Dikunci!",
+                "Layar siswa berhasil dikunci paksa.",
+              ),
+            300,
+          );
+        } catch (err) {
+          showAlert(
+            "danger",
+            "Gagal",
+            "Pastikan koneksi internet Anda stabil.",
+          );
+        }
+      },
+    );
   };
 
   const lockedStudents = studentsData.filter((s) => s.status === "LOCKED");
@@ -1151,16 +1209,41 @@ const UjianDashboard = () => {
                           )}
                         </div>
 
-                        {activeTab === "builder" && isSitting && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRemoveStudent(deskNo);
-                            }}
-                            className="absolute -top-3 -right-3 bg-red-500 text-white rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity z-[120] hover:bg-red-600 shadow-lg"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                        {/* TOMBOL RAHASIA ADMIN (KUNCI/BUKA PAKSA DI LIVE MODE) */}
+                        {activeTab === "live" && isSitting && liveStudent && (
+                          <div className="absolute -top-3 -right-3 flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 transition-all z-[130] pointer-events-auto">
+                            {liveStudent.status === "WORKING" && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleForceLock(
+                                    liveStudent.username,
+                                    liveStudent.id_ujian,
+                                  );
+                                }}
+                                className="bg-orange-500 text-white p-2 rounded-full shadow-lg hover:bg-orange-600 hover:scale-110 transition-transform cursor-pointer"
+                                title="Kunci Paksa Layar Siswa Ini"
+                              >
+                                <Lock size={14} />
+                              </button>
+                            )}
+                            {(liveStudent.status === "LOCKED" ||
+                              isDisqualified) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleUnlockStudent(
+                                    liveStudent.username,
+                                    liveStudent.id_ujian,
+                                  );
+                                }}
+                                className="bg-emerald-500 text-white p-2 rounded-full shadow-lg hover:bg-emerald-600 hover:scale-110 transition-transform cursor-pointer"
+                                title="Buka Paksa & Maafkan Pelanggaran Siswa Ini"
+                              >
+                                <Unlock size={14} />
+                              </button>
+                            )}
+                          </div>
                         )}
 
                         {activeTab === "live" &&
