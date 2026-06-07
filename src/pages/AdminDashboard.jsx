@@ -576,43 +576,57 @@ const AdminDashboard = () => {
   useEffect(() => {
     fetchAllData(false);
 
-    // MESIN REALTIME: Memantau perubahan dari admin lain tanpa perlu klik refresh
+    // MESIN REALTIME SEJATI: Suntik data langsung tanpa fetch ulang, berjalan di semua tab secara diam-diam!
+    const handleRealtimePayload = (payload, stateKey) => {
+      setAllData((prev) => {
+        const currentData = prev[stateKey] || [];
+        if (payload.eventType === "INSERT") {
+          return { ...prev, [stateKey]: [...currentData, payload.new] };
+        } else if (payload.eventType === "UPDATE") {
+          return {
+            ...prev,
+            [stateKey]: currentData.map((item) =>
+              item.id === payload.new.id ? payload.new : item
+            ),
+          };
+        } else if (payload.eventType === "DELETE") {
+          return {
+            ...prev,
+            [stateKey]: currentData.filter((item) => item.id !== payload.old.id),
+          };
+        }
+        return prev;
+      });
+    };
+
     const channel = supabase
       .channel("admin-dashboard-changes")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "Users" },
-        () => {
-          if (tab === "siswa") refreshCurrentTab(true);
-        },
+        { event: "*", schema: "public", table: "users" }, // <-- Sudah huruf kecil
+        (payload) => handleRealtimePayload(payload, "siswa")
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "Jadwal" },
-        () => {
-          if (tab === "jadwal") refreshCurrentTab(true);
-        },
+        { event: "*", schema: "public", table: "jadwal" }, // <-- Sudah huruf kecil
+        (payload) => handleRealtimePayload(payload, "jadwal")
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "Mapel" },
-        () => {
-          if (tab === "mapel") refreshCurrentTab(true);
-        },
+        { event: "*", schema: "public", table: "mapel" }, // <-- Sudah huruf kecil
+        (payload) => handleRealtimePayload(payload, "mapel")
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "Settings" },
-        () => {
-          if (tab === "settings") refreshCurrentTab(true);
-        },
+        { event: "*", schema: "public", table: "settings" }, // <-- Sudah huruf kecil
+        (payload) => handleRealtimePayload(payload, "settings")
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [tab]); // React akan meng-update listener saat admin berpindah tab
+  }, []); // Hapus dependensi [tab] agar realtime tetap jalan walau beda tab
   useEffect(() => {
     setSearch("");
     setFilters({});

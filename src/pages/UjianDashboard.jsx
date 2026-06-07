@@ -549,21 +549,45 @@ const UjianDashboard = () => {
 
     fetchLiveStatus(); // Tarik satu kali saja
 
-    // Cuma mendengarkan sinyal perubahan (0 MB Kuota tersedot jika kelas hening)
     const channel = supabase
       .channel("admin-live-monitoring")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "sesi_ujian" },
-        () => {
-          fetchLiveStatus(); // Tarik ulang hanya saat ada perubahan di HP Siswa!
+        { event: "UPDATE", schema: "public", table: "sesi_ujian" },
+        (payload) => {
+          // Buka kunci INSTAN tanpa loading data dari server
+          const dataBaru = payload.new;
+          if (dataBaru) {
+            setStudentsData((prev) =>
+              prev.map((siswa) =>
+                siswa.username === dataBaru.username_siswa
+                  ? {
+                      ...siswa,
+                      status:
+                        dataBaru.status === "LOCKED" ? "LOCKED" : "WORKING",
+                      pelanggaran: dataBaru.pelanggaran,
+                    }
+                  : siswa,
+              ),
+            );
+          }
         },
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "nilai" },
-        () => {
-          fetchLiveStatus();
+        { event: "INSERT", schema: "public", table: "nilai" },
+        (payload) => {
+          // Jika ada siswa selesai, ubah status denah mejanya jadi hijau
+          const dataSelesai = payload.new;
+          if (dataSelesai) {
+            setStudentsData((prev) =>
+              prev.map((siswa) =>
+                siswa.username === dataSelesai.username
+                  ? { ...siswa, status: "SELESAI", progress: 100 }
+                  : siswa,
+              ),
+            );
+          }
         },
       )
       .subscribe();
@@ -846,8 +870,16 @@ const UjianDashboard = () => {
 
   const handleUnlockStudent = async (username, examId) => {
     try {
-      // Buka kunci dan kembalikan pelanggaran ke 0 agar siswa bersih kembali
-      await api.updateSesiStatus(username, examId, "ACTIVE", 0);
+      // 1. Cek berapa pelanggaran asli siswa saat ini
+      const siswaTerkait = studentsData.find((s) => s.username === username);
+      const pelanggaranAsli =
+        siswaTerkait && siswaTerkait.pelanggaran !== undefined
+          ? siswaTerkait.pelanggaran
+          : 2;
+      // Asumsi default 2 jika tidak ada data
+
+      // 2. Buka kunci (ACTIVE), TAPI biarkan dosa pelanggaran aslinya utuh
+      await api.updateSesiStatus(username, examId, "ACTIVE", pelanggaranAsli);
       setStudentsData((prev) =>
         prev.map((s) =>
           s.username === username ? { ...s, status: "WORKING" } : s,
@@ -856,7 +888,7 @@ const UjianDashboard = () => {
       showAlert(
         "success",
         "Kunci Terbuka",
-        `Akses ujian berhasil dipulihkan paksa.`,
+        `Akses ujian berhasil dipulihkan tanpa me-reset riwayat pelanggaran.`,
       );
     } catch (err) {
       showAlert(
@@ -867,23 +899,35 @@ const UjianDashboard = () => {
     }
   };
 
-  // FITUR BARU: KUNCI PAKSA SISWA OLEH ADMIN
   const handleForceLock = async (username, examId) => {
     showAlert(
       "confirm",
       "Kunci Paksa Siswa?",
-      "Anda yakin ingin mengunci layar siswa ini secara paksa? Layar mereka akan langsung menjadi merah.",
+      "Anda yakin ingin mengunci layar siswa ini secara paksa?",
       async () => {
         try {
-          // Status diubah menjadi LOCKED dan pelanggaran dibuat 3 agar terdeteksi merah
-          await api.updateSesiStatus(username, examId, "LOCKED", 3);
+          // 1. Cek berapa pelanggaran asli siswa saat ini
+          const siswaTerkait = studentsData.find(
+            (s) => s.username === username,
+          );
+          const pelanggaranAsli =
+            siswaTerkait && siswaTerkait.pelanggaran !== undefined
+              ? siswaTerkait.pelanggaran
+              : 0;
+
+          // 2. Ubah status jadi LOCKED, TAPI biarkan dosa pelanggaran aslinya utuh (jangan dipaksa 3)
+          await api.updateSesiStatus(
+            username,
+            examId,
+            "LOCKED",
+            pelanggaranAsli,
+          );
           setStudentsData((prev) =>
             prev.map((s) =>
               s.username === username ? { ...s, status: "LOCKED" } : s,
             ),
           );
           closeAlert();
-          // Timeout agar alert sebelumnya tertutup dulu
           setTimeout(
             () =>
               showAlert(

@@ -795,32 +795,38 @@ const GuruDashboard = () => {
     };
     fetchCount();
 
-    // MESIN REALTIME: Hanya bereaksi jika ada perubahan di server
+    // MESIN REALTIME SEJATI: Memperbarui layar tanpa fetch ulang yang bikin lag
     const channel = supabase
       .channel("guru-live-monitoring")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "nilai" },
-        () => {
-          // Bereaksi HANYA jika ada siswa yang baru saja mengumpulkan ujian
-          fetchLiveMonitoring();
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setAllData((prev) => ({ ...prev, nilai: [payload.new, ...prev.nilai] }));
+          } else if (payload.eventType === "UPDATE") {
+            setAllData((prev) => ({
+              ...prev,
+              nilai: prev.nilai.map((n) => n.id === payload.new.id ? payload.new : n)
+            }));
+          }
         },
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "sesi_ujian" },
-        () => {
-          // Bereaksi HANYA jika ada siswa yang terkunci (pelanggaran)
-          fetchLiveMonitoring();
+        { event: "UPDATE", schema: "public", table: "sesi_ujian" },
+        (payload) => {
+          setSesiUjianData((prev) => {
+            const exists = prev.find(s => s.id_sesi === payload.new.id_sesi);
+            if (exists) return prev.map(s => s.id_sesi === payload.new.id_sesi ? payload.new : s);
+            return [...prev, payload.new];
+          });
         },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "soal" },
-        () => {
-          // Update jumlah soal jika guru lain baru saja menambah soal
-          fetchCount();
-        },
+        () => { fetchCount(); }
       )
       .subscribe();
 

@@ -559,19 +559,30 @@ const SiswaDashboard = () => {
       const username = getVal(user, "Username");
       const examId = getVal(activeExamRef.current, "ID");
 
+      // --- KODE BARU: FUNGSI SIMPAN KE BRANKAS HP OFFLINE ---
+      const simpanStatusOffline = (pelanggaranBaru, statusKunci) => {
+        localStorage.setItem(
+          `status_ujian_${username}_${examId}`,
+          JSON.stringify({
+            pelanggaran: pelanggaranBaru,
+            isLocked: statusKunci,
+          }),
+        );
+      };
+      // ------------------------------------------------------
+
       if (currentPelanggaran === 0) {
         // TAHAP 1: PERINGATAN SAJA (Toleransi 1x)
         pelanggaranRef.current = 1;
         setPelanggaran(1);
+        simpanStatusOffline(1, false); // Amankan ke HP
 
-        // Memunculkan Pop-up Notif tanpa mengunci layar
         showAlert(
           "warning",
           "Peringatan",
-          `Sistem mendeteksi aktivitas di luar ujian (Panggilan, Notifikasi, atau Keluar Aplikasi). \n\nSolusi yang bisa dicoba, tarik bilah notifikasi & AKTIFKAN fitur "JANGAN GANGGU" di HP kalian untuk mencegah gangguan dari luar. \n\nMohon berhati-hati, ini adalah PERINGATAN PERTAMA. Jika terulang, layar ujian akan dikunci!`,
+          `Sistem mendeteksi aktivitas di luar ujian. Ini adalah PERINGATAN PERTAMA. Jika terulang, layar ujian akan dikunci!`,
         );
 
-        // Simpan status tetap ACTIVE ke database tapi poin pelanggaran naik 1
         await api.saveSesi(
           username,
           examId,
@@ -580,7 +591,6 @@ const SiswaDashboard = () => {
           1,
           "ACTIVE",
         );
-
         setTimeout(() => {
           isProcessing = false;
         }, 3000);
@@ -588,10 +598,10 @@ const SiswaDashboard = () => {
         // TAHAP 2: TERKUNCI (Harus dibuka oleh Guru)
         pelanggaranRef.current = 2;
         isLockedRef.current = true;
-
         setPelanggaran(2);
         setTimeLeft(timeLeftRef.current);
         setIsLocked(true);
+        simpanStatusOffline(2, true); // Amankan ke HP (Layar Terkunci)
 
         await api.saveSesi(
           username,
@@ -601,16 +611,15 @@ const SiswaDashboard = () => {
           2,
           "LOCKED",
         );
-
         setTimeout(() => {
           isProcessing = false;
         }, 2000);
       } else if (currentPelanggaran >= 2) {
-        // TAHAP 3: DISKUALIFIKASI (Ngeyel setelah dibuka kuncinya)
+        // TAHAP 3: DISKUALIFIKASI
         pelanggaranRef.current = 3;
         isLockedRef.current = true;
-
         setPelanggaran(3);
+        simpanStatusOffline(3, true); // Amankan ke HP (Diskualifikasi)
 
         await api.saveSesi(
           username,
@@ -899,7 +908,6 @@ const SiswaDashboard = () => {
           console.warn("Gagal membaca history jawaban", e);
         }
 
-        // Jika data di HP siswa ada dan lebih banyak isinya daripada di server, pakai data HP
         if (
           localSavedAnswers &&
           Object.keys(localSavedAnswers).length >=
@@ -914,9 +922,31 @@ const SiswaDashboard = () => {
         setPelanggaran(serverSession.pelanggaran || 0);
         setIsLocked(serverSession.status === "LOCKED");
       } else {
+        // =============================================================
+        // KODE BARU: JIKA OFFLINE, BACA STATUS KUNCI DARI BRANKAS HP
+        // =============================================================
         finalAnswers = localSavedAnswers || {};
-        setPelanggaran(0);
-        setIsLocked(false);
+
+        const usernameSiswa = getVal(user, "Username");
+        const statusOffline = localStorage.getItem(
+          `status_ujian_${usernameSiswa}_${examId}`,
+        );
+
+        if (statusOffline) {
+          const parsedStatus = JSON.parse(statusOffline);
+          setPelanggaran(parsedStatus.pelanggaran || 0);
+          setIsLocked(parsedStatus.isLocked || false);
+
+          // Sinkronkan Ref agar mesin Anti-Cheat tidak bingung
+          pelanggaranRef.current = parsedStatus.pelanggaran || 0;
+          isLockedRef.current = parsedStatus.isLocked || false;
+        } else {
+          setPelanggaran(0);
+          setIsLocked(false);
+          pelanggaranRef.current = 0;
+          isLockedRef.current = false;
+        }
+        // =============================================================
       }
       try {
         await api.saveSesi(
@@ -1201,14 +1231,24 @@ const SiswaDashboard = () => {
             maxLength={6}
             className="w-full text-center bg-slate-800 border border-slate-600 text-white font-black tracking-[0.5em] p-3 rounded-xl focus:outline-none focus:border-emerald-500 placeholder:tracking-normal placeholder:font-medium placeholder:text-slate-600"
             onChange={(e) => {
-              // Ganti "123456" dengan PIN rahasia yang Anda sepakati dengan guru-guru
               if (e.target.value === "123456") {
+                // Hanya membuka kuncinya saja, JANGAN me-reset angka pelanggarannya.
+                // Angka pelanggaran tetap utuh sesuai yang ada di sistem saat ini (misal: tetap 2).
                 setIsLocked(false);
                 isLockedRef.current = false;
-                setPelanggaran(0); // Reset pelanggaran agar dimaafkan sepenuhnya
-                pelanggaranRef.current = 0;
 
-                // Paksa kembali ke Fullscreen
+                // --- KODE BARU: UPDATE BRANKAS HP AGAR TIDAK TERKUNCI LAGI SAAT REFRESH ---
+                const usernameSiswa = getVal(user, "Username");
+                const examId = getVal(activeExamRef.current, "ID");
+                localStorage.setItem(
+                  `status_ujian_${usernameSiswa}_${examId}`,
+                  JSON.stringify({
+                    pelanggaran: pelanggaranRef.current, // Pelanggaran tetap, tidak jadi 0
+                    isLocked: false, // Layar resmi dibuka
+                  }),
+                );
+                // --------------------------------------------------------------------------
+
                 try {
                   const docElm = document.documentElement;
                   if (docElm.requestFullscreen)
@@ -1218,7 +1258,7 @@ const SiswaDashboard = () => {
                 showAlert(
                   "success",
                   "Kunci Dibuka Darurat",
-                  "Pengawas telah membuka kunci ujian Anda secara manual. Lanjutkan ujian Anda!",
+                  "Pengawas telah membuka kunci ujian secara manual. Lanjutkan ujian Anda!",
                 );
               }
             }}
