@@ -357,12 +357,14 @@ const SiswaDashboard = () => {
       // =======================================================
       if (!isBackground) {
         // Bongkar brankas memori HP siswa berdasarkan username mereka
-        const cachedJadwal = localStorage.getItem('tadbira_siswa_jadwal');
-        const cachedNilai = localStorage.getItem(`tadbira_siswa_nilai_${getVal(user, "Username")}`);
-        
+        const cachedJadwal = localStorage.getItem("tadbira_siswa_jadwal");
+        const cachedNilai = localStorage.getItem(
+          `tadbira_siswa_nilai_${getVal(user, "Username")}`,
+        );
+
         if (cachedJadwal) setExams(JSON.parse(cachedJadwal));
         if (cachedNilai) setMyResults(JSON.parse(cachedNilai));
-        
+
         // Langsung matikan loading agar jadwal dan nilai instan muncul di HP!
         setLoading(false);
       }
@@ -374,11 +376,22 @@ const SiswaDashboard = () => {
         try {
           const settingsRes = await api.read("Settings");
           if (settingsRes && Array.isArray(settingsRes)) {
-            const acSetting = settingsRes.find((s) => String(s.kunci).toUpperCase() === "MODE_UJIAN");
-            setIsAntiCheatActive(acSetting ? String(acSetting.nilai).toUpperCase() !== "OFF" : true);
+            const acSetting = settingsRes.find(
+              (s) => String(s.kunci).toUpperCase() === "MODE_UJIAN",
+            );
+            setIsAntiCheatActive(
+              acSetting
+                ? String(acSetting.nilai).toUpperCase() !== "OFF"
+                : true,
+            );
 
-            const appOnlySetting = settingsRes.find((s) => String(s.kunci).toUpperCase() === "MODE_APLIKASI");
-            if (appOnlySetting && String(appOnlySetting.nilai).toUpperCase() === "ON") {
+            const appOnlySetting = settingsRes.find(
+              (s) => String(s.kunci).toUpperCase() === "MODE_APLIKASI",
+            );
+            if (
+              appOnlySetting &&
+              String(appOnlySetting.nilai).toUpperCase() === "ON"
+            ) {
               if (!isWebView()) setIsAppBlocked(true);
               else setIsAppBlocked(false);
             } else {
@@ -394,8 +407,14 @@ const SiswaDashboard = () => {
               });
             }
 
-            const acakSetting = settingsRes.find((s) => String(s.kunci).toUpperCase() === "ACAK_SOAL");
-            setIsAcakSoalActive(acakSetting ? String(acakSetting.nilai).toUpperCase() !== "OFF" : true);
+            const acakSetting = settingsRes.find(
+              (s) => String(s.kunci).toUpperCase() === "ACAK_SOAL",
+            );
+            setIsAcakSoalActive(
+              acakSetting
+                ? String(acakSetting.nilai).toUpperCase() !== "OFF"
+                : true,
+            );
           }
         } catch (setErr) {
           console.warn("Gagal menarik konfigurasi pengaturan admin:", setErr);
@@ -406,12 +425,15 @@ const SiswaDashboard = () => {
         const jadwalRes = await api.read("Jadwal");
         const userName = String(getVal(user, "Nama") || "");
         const finalNilai = await api.getNilaiSiswa(userName);
-        
+
         let finalJadwal = [];
         if (jadwalRes && jadwalRes.length > 0) {
           finalJadwal = jadwalRes.filter((j) => {
-            const jadwalKelasRaw = String(getVal(j, "Kelas") || "").toUpperCase();
-            if (jadwalKelasRaw === "" || jadwalKelasRaw.includes("SEMUA")) return true;
+            const jadwalKelasRaw = String(
+              getVal(j, "Kelas") || "",
+            ).toUpperCase();
+            if (jadwalKelasRaw === "" || jadwalKelasRaw.includes("SEMUA"))
+              return true;
             const targetArray = jadwalKelasRaw.split(",").map((t) => t.trim());
             return targetArray.some(
               (target) =>
@@ -424,17 +446,32 @@ const SiswaDashboard = () => {
         }
 
         // Perbarui layar hanya jika ada data jadwal/nilai baru dari server
-        setExams((prev) => JSON.stringify(prev) !== JSON.stringify(finalJadwal) ? finalJadwal : prev);
-        setMyResults((prev) => JSON.stringify(prev) !== JSON.stringify(finalNilai) ? finalNilai : prev);
+        setExams((prev) =>
+          JSON.stringify(prev) !== JSON.stringify(finalJadwal)
+            ? finalJadwal
+            : prev,
+        );
+        setMyResults((prev) =>
+          JSON.stringify(prev) !== JSON.stringify(finalNilai)
+            ? finalNilai
+            : prev,
+        );
 
         // SIMPAN KE BRANKAS LOKAL UNTUK BUKA APLIKASI BESOK / NANTI
-        localStorage.setItem('tadbira_siswa_jadwal', JSON.stringify(finalJadwal));
-        localStorage.setItem(`tadbira_siswa_nilai_${getVal(user, "Username")}`, JSON.stringify(finalNilai));
-
+        localStorage.setItem(
+          "tadbira_siswa_jadwal",
+          JSON.stringify(finalJadwal),
+        );
+        localStorage.setItem(
+          `tadbira_siswa_nilai_${getVal(user, "Username")}`,
+          JSON.stringify(finalNilai),
+        );
       } catch (err) {
         // Jangan tampilkan pesan error merah jika siswa sudah punya data offline di HP-nya
-        if (!isBackground && !localStorage.getItem('tadbira_siswa_jadwal')) {
-            setErrorMsg("Gagal terhubung ke database ujian dan tidak ada data offline.");
+        if (!isBackground && !localStorage.getItem("tadbira_siswa_jadwal")) {
+          setErrorMsg(
+            "Gagal terhubung ke database ujian dan tidak ada data offline.",
+          );
         }
       } finally {
         if (!isBackground) setLoading(false);
@@ -1056,14 +1093,6 @@ const SiswaDashboard = () => {
 
   const handleEndExamClick = (isForced = false) => {
     if (isSubmittingRef.current) return;
-    if (isOffline && !isForced) {
-      showAlert(
-        "danger",
-        "Koneksi Terputus",
-        "Tidak dapat mengumpulkan ujian. Pastikan data seluler atau WiFi terhubung kembali, lalu coba lagi. Jangan keluar dari aplikasi!",
-      );
-      return;
-    }
     if (!isForced) {
       showAlert(
         "confirm",
@@ -1162,10 +1191,12 @@ const SiswaDashboard = () => {
         {/* FITUR BARU: PIN BUKA KUNCI DARURAT (OFFLINE) UNTUK GURU */}
         <div className="w-full max-w-xs mt-4 pt-6 border-t border-slate-800/50 flex flex-col items-center">
           <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-3 text-center">
-            Mode Darurat Gangguan Server<br/>(Hanya Diisi Oleh Pengawas)
+            Mode Darurat Gangguan Server
+            <br />
+            (Hanya Diisi Oleh Pengawas)
           </p>
-          <input 
-            type="password" 
+          <input
+            type="password"
             placeholder="PIN PENGAWAS"
             maxLength={6}
             className="w-full text-center bg-slate-800 border border-slate-600 text-white font-black tracking-[0.5em] p-3 rounded-xl focus:outline-none focus:border-emerald-500 placeholder:tracking-normal placeholder:font-medium placeholder:text-slate-600"
@@ -1176,19 +1207,23 @@ const SiswaDashboard = () => {
                 isLockedRef.current = false;
                 setPelanggaran(0); // Reset pelanggaran agar dimaafkan sepenuhnya
                 pelanggaranRef.current = 0;
-                
+
                 // Paksa kembali ke Fullscreen
                 try {
                   const docElm = document.documentElement;
-                  if (docElm.requestFullscreen) docElm.requestFullscreen().catch(() => {});
+                  if (docElm.requestFullscreen)
+                    docElm.requestFullscreen().catch(() => {});
                 } catch (err) {}
 
-                showAlert("success", "Kunci Dibuka Darurat", "Pengawas telah membuka kunci ujian Anda secara manual. Lanjutkan ujian Anda!");
+                showAlert(
+                  "success",
+                  "Kunci Dibuka Darurat",
+                  "Pengawas telah membuka kunci ujian Anda secara manual. Lanjutkan ujian Anda!",
+                );
               }
             }}
           />
         </div>
-
       </div>
     );
   }
