@@ -554,14 +554,19 @@ const UjianDashboard = () => {
       .channel("admin-live-monitoring")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "sesi_ujian" },
-        () => {
-          fetchLiveStatus(); // Tarik ulang hanya saat ada perubahan di HP Siswa!
+        { event: "UPDATE", schema: "public", table: "sesi_ujian" },
+        (payload) => {
+          const dataBaru = payload.new;
+          const dataLama = payload.old; // Sekarang dataLama tidak lagi NULL
+
+          // Update state studentsData secara lokal tanpa perlu fetchLiveStatus()
+          // Ini membuat aplikasi jauh lebih ringan
+          updateStudentState(dataBaru);
         },
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "Nilai" },
+        { event: "*", schema: "public", table: "nilai" },
         () => {
           fetchLiveStatus();
         },

@@ -753,36 +753,57 @@ const GuruDashboard = () => {
     }
   };
 
-  const fetchLiveMonitoring = async () => {
-    setIsSyncing(true);
-    try {
-      const [resNilai, lockedRes] = await Promise.all([
-        api.read(TAB_CONFIG.nilai.sheet),
-        api.getSesiTerkunci().catch(() => []),
-      ]);
+  // MESIN REALTIME SEJATI: Memperbarui layar instan menggunakan DATA DARI PAYLOAD
+const channel = supabase
+  .channel("guru-live-monitoring")
+  .on(
+    "postgres_changes",
+    { event: "*", schema: "public", table: "nilai" }, // Pastikan huruf kecil jika di DB Anda huruf kecil
+    (payload) => {
+      if (payload.eventType === "INSERT") {
+        // Ambil data nilai baru, langsung selipkan di baris paling atas tabel guru
+        setLiveMonitoring((prevData) => [payload.new, ...prevData]);
+      } else if (payload.eventType === "UPDATE") {
+        // Update nilai siswa yang bersangkutan saja di layar guru
+        setLiveMonitoring((prevData) =>
+          prevData.map((item) => item.id === payload.new.id ? payload.new : item)
+        );
+      }
+    },
+  )
+  .on(
+    "postgres_changes",
+    { event: "*", schema: "public", table: "sesi_ujian" },
+    (payload) => {
+      // Bereaksi langsung jika status sesi siswa berubah (Terkunci / Pelanggaran / Aktif)
+      if (payload.eventType === "UPDATE" || payload.eventType === "INSERT") {
+        setLiveMonitoring((prevData) =>
+          prevData.map((item) => 
+            // Mencocokkan data berdasarkan username_siswa agar status "Kunci" langsung berubah di layar guru
+            item.username_siswa === payload.new.username_siswa ? { ...item, ...payload.new } : item
+          )
+        );
+      }
+    },
+  )
+  .on(
+    "postgres_changes",
+    { event: "*", schema: "public", table: "Soal" },
+    (payload) => {
+      // Update jumlah total soal secara instan tanpa fetch ulang
+      if (payload.eventType === "INSERT") {
+        setCount((prev) => prev + 1);
+      } else if (payload.eventType === "DELETE") {
+        setCount((prev) => prev - 1);
+      }
+    },
+  )
+  .subscribe();
 
-      const finalNilai = resNilai || [];
-      const finalLocked = lockedRes || [];
-
-      setAllData((prev) => {
-        const newData = {
-          ...prev,
-          nilai: finalNilai,
-        };
-        return JSON.stringify(prev) !== JSON.stringify(newData) ? newData : prev;
-      });
-      setSesiUjianData(finalLocked);
-
-      // Simpan juga ke brankas lokal, agar jika guru refresh halaman, datanya tidak mundur ke belakang
-      localStorage.setItem('tadbira_cache_nilai', JSON.stringify(finalNilai));
-      localStorage.setItem('tadbira_cache_sesi', JSON.stringify(finalLocked));
-
-    } catch (error) {
-      console.error("Gagal refresh live monitoring:", error);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
+return () => {
+  // Bersihkan saluran jika guru pindah halaman
+  supabase.removeChannel(channel);
+};
 
   useEffect(() => {
     // Tarik data penuh satu kali saja saat halaman pertama kali dibuka
