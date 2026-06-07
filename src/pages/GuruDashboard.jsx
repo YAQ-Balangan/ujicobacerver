@@ -753,60 +753,36 @@ const GuruDashboard = () => {
     }
   };
 
-  // MESIN REALTIME SEJATI: Memperbarui layar instan menggunakan DATA DARI PAYLOAD
-  const channel = supabase
-    .channel("guru-live-monitoring")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "nilai" }, // Pastikan huruf kecil jika di DB Anda huruf kecil
-      (payload) => {
-        if (payload.eventType === "INSERT") {
-          // Ambil data nilai baru, langsung selipkan di baris paling atas tabel guru
-          setLiveMonitoring((prevData) => [payload.new, ...prevData]);
-        } else if (payload.eventType === "UPDATE") {
-          // Update nilai siswa yang bersangkutan saja di layar guru
-          setLiveMonitoring((prevData) =>
-            prevData.map((item) =>
-              item.id === payload.new.id ? payload.new : item,
-            ),
-          );
-        }
-      },
-    )
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "sesi_ujian" },
-      (payload) => {
-        // Bereaksi langsung jika status sesi siswa berubah (Terkunci / Pelanggaran / Aktif)
-        if (payload.eventType === "UPDATE" || payload.eventType === "INSERT") {
-          setLiveMonitoring((prevData) =>
-            prevData.map((item) =>
-              // Mencocokkan data berdasarkan username_siswa agar status "Kunci" langsung berubah di layar guru
-              item.username_siswa === payload.new.username_siswa
-                ? { ...item, ...payload.new }
-                : item,
-            ),
-          );
-        }
-      },
-    )
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "soal" },
-      (payload) => {
-        // Update jumlah total soal secara instan tanpa fetch ulang
-        if (payload.eventType === "INSERT") {
-          setCount((prev) => prev + 1);
-        } else if (payload.eventType === "DELETE") {
-          setCount((prev) => prev - 1);
-        }
-      },
-    )
-    .subscribe();
+  const fetchLiveMonitoring = async () => {
+    setIsSyncing(true);
+    try {
+      const [resNilai, lockedRes] = await Promise.all([
+        api.read(TAB_CONFIG.nilai.sheet),
+        api.getSesiTerkunci().catch(() => []),
+      ]);
 
-  return () => {
-    // Bersihkan saluran jika guru pindah halaman
-    supabase.removeChannel(channel);
+      const finalNilai = resNilai || [];
+      const finalLocked = lockedRes || [];
+
+      setAllData((prev) => {
+        const newData = {
+          ...prev,
+          nilai: finalNilai,
+        };
+        return JSON.stringify(prev) !== JSON.stringify(newData)
+          ? newData
+          : prev;
+      });
+      setSesiUjianData(finalLocked);
+
+      // Simpan juga ke brankas lokal, agar jika guru refresh halaman, datanya tidak mundur ke belakang
+      localStorage.setItem("tadbira_cache_nilai", JSON.stringify(finalNilai));
+      localStorage.setItem("tadbira_cache_sesi", JSON.stringify(finalLocked));
+    } catch (error) {
+      console.error("Gagal refresh live monitoring:", error);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   useEffect(() => {
@@ -819,85 +795,37 @@ const GuruDashboard = () => {
     };
     fetchCount();
 
-    // MESIN REALTIME SEJATI: Menggunakan Payload (Tanpa re-fetch / loading ulang)
+    // MESIN REALTIME: Hanya bereaksi jika ada perubahan di server
     const channel = supabase
       .channel("guru-live-monitoring")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "nilai" },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            // Selipkan data nilai baru langsung ke layar
-            setAllData((prev) => ({
-              ...prev,
-              nilai: [payload.new, ...(prev.nilai || [])],
-            }));
-          } else if (payload.eventType === "UPDATE") {
-            // Update nilai siswa yang sudah ada
-            setAllData((prev) => ({
-              ...prev,
-              nilai: (prev.nilai || []).map((item) =>
-                item.id === payload.new.id ? payload.new : item,
-              ),
-            }));
-          } else if (payload.eventType === "DELETE") {
-            setAllData((prev) => ({
-              ...prev,
-              nilai: (prev.nilai || []).filter(
-                (item) => item.id !== payload.old.id,
-              ),
-            }));
-          }
+        () => {
+          // Bereaksi HANYA jika ada siswa yang baru saja mengumpulkan ujian
+          fetchLiveMonitoring();
         },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "sesi_ujian" },
-        (payload) => {
-          // Update status pelanggaran / kunci secara instan
-          if (
-            payload.eventType === "UPDATE" ||
-            payload.eventType === "INSERT"
-          ) {
-            setSesiUjianData((prevData) => {
-              const isExist = prevData.some(
-                (item) => item.username_siswa === payload.new.username_siswa,
-              );
-              if (isExist) {
-                return prevData.map((item) =>
-                  item.username_siswa === payload.new.username_siswa
-                    ? { ...item, ...payload.new }
-                    : item,
-                );
-              } else {
-                return [...prevData, payload.new];
-              }
-            });
-          } else if (payload.eventType === "DELETE") {
-            setSesiUjianData((prev) =>
-              prev.filter(
-                (item) => item.username_siswa !== payload.old.username_siswa,
-              ),
-            );
-          }
+        () => {
+          // Bereaksi HANYA jika ada siswa yang terkunci (pelanggaran)
+          fetchLiveMonitoring();
         },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "soal" },
-        (payload) => {
-          // Update total soal otomatis jika guru lain menambah soal
-          if (payload.eventType === "INSERT") {
-            setIndikatorTotalSoal((prev) => prev + 1);
-          } else if (payload.eventType === "DELETE") {
-            setIndikatorTotalSoal((prev) => Math.max(0, prev - 1));
-          }
+        () => {
+          // Update jumlah soal jika guru lain baru saja menambah soal
+          fetchCount();
         },
       )
       .subscribe();
 
     return () => {
-      // Bersihkan saluran saat guru pindah/tutup halaman
+      // Bersihkan saluran jika guru pindah halaman
       supabase.removeChannel(channel);
     };
   }, []);
