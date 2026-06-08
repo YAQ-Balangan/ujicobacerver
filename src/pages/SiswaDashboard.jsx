@@ -718,67 +718,19 @@ const SiswaDashboard = () => {
     // Sengaja dikosongkan agar menghemat kuota egress data server & HP siswa
   }, []);
 
-  // --- MESIN SINKRONISASI LATAR BELAKANG (OFFLINE-FIRST MECHANISM) ---
-  const triggerBackgroundSync = useCallback(async () => {
-    if (!navigator.onLine) return; // Jika HP sedang offline, batalkan pengiriman
-
-    const queueStr = localStorage.getItem("tadbira_sync_queue");
-    if (!queueStr) return;
-
-    let syncQueue = JSON.parse(queueStr);
-    if (syncQueue.length === 0) return;
-
-    let remainingQueue = [...syncQueue];
-
-    for (let i = 0; i < syncQueue.length; i++) {
-      const item = syncQueue[i];
-      try {
-        // Kirim nilai hasil ujian ke server
-        await api.create("Nilai", item.nilaiData);
-        // Hapus jejak sesi ujian siswa di server
-        await api.deleteSesi(item.username, item.idUjian);
-
-        // Jika sukses dikirim, hapus item ini dari antrean lokal HP
-        remainingQueue = remainingQueue.filter(
-          (q) => q.idUjian !== item.idUjian,
-        );
-        localStorage.setItem(
-          "tadbira_sync_queue",
-          JSON.stringify(remainingQueue),
-        );
-        console.log(
-          "Sinkronisasi otomatis latar belakang berhasil untuk:",
-          item.nilaiData.mapel,
-        );
-      } catch (error) {
-        console.warn(
-          "Gagal sinkron data ke server, akan dicoba otomatis nanti:",
-          error,
-        );
-        break; // Hentikan loop sementara jika server down agar antrean tidak rusak
-      }
-    }
-  }, []);
-
-  // Pasang pemantau sinyal internet HP secara otomatis
+  // Pasang pemantau sinyal internet HP secara otomatis (Sudah dibersihkan dari fungsi sync)
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOffline(false);
-      triggerBackgroundSync(); // Sinyal HP kembali ada? Langsung nembak kirim nilai!
-    };
+    const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
-    // Jalankan pengecekan antrean setiap kali halaman dibuka
-    triggerBackgroundSync();
-
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [triggerBackgroundSync]);
+  }, []);
 
   // 4. MEMULAI UJIAN
   const handleStartExam = async (exam) => {

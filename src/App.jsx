@@ -1,9 +1,10 @@
 // src/App.jsx
-import React, { useContext } from "react";
+import React, { useContext, useEffect } from "react"; // Menambahkan useEffect
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, AuthContext } from "./context/AuthContext";
+import { api } from "./api/api"; // Import API satu tempat, jalur relatif dari src/App.jsx
 
-// Import halaman-halaman yang sudah kita pisahkan
+// Import halaman-halaman yang sudah dipisahkan
 import LoginPage from "./pages/LoginPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import GuruDashboard from "./pages/GuruDashboard";
@@ -28,6 +29,65 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 // --- ROUTER UTAMA ---
 const AppRouter = () => {
   const { user } = useContext(AuthContext);
+
+  // =================================================================================
+  // MESIN OTOMATIS: GLOBAL BACKGROUND SYNC (BERJALAN TANPA SYARAT LOGIN)
+  // =================================================================================
+  useEffect(() => {
+    const triggerGlobalBackgroundSync = async () => {
+      if (!navigator.onLine) return; // Jika perangkat sedang offline, batalkan pengiriman
+
+      const queueStr = localStorage.getItem("tadbira_sync_queue");
+      if (!queueStr) return;
+
+      let syncQueue;
+      try {
+        syncQueue = JSON.parse(queueStr);
+      } catch (e) {
+        return;
+      }
+
+      if (!Array.isArray(syncQueue) || syncQueue.length === 0) return;
+
+      let remainingQueue = [...syncQueue];
+
+      for (let i = 0; i < syncQueue.length; i++) {
+        const item = syncQueue[i];
+        try {
+          // Mengirimkan nilai siswa yang pending ke server database
+          await api.create("Nilai", item.nilaiData);
+
+          // Jika sukses dikirim, hapus dari antrean lokal memori HP
+          remainingQueue = remainingQueue.filter(
+            (q) => q.idUjian !== item.idUjian,
+          );
+          localStorage.setItem(
+            "tadbira_sync_queue",
+            JSON.stringify(remainingQueue),
+          );
+          console.log(
+            "Auto-Sync TADBIRA: Nilai pending sukses dikirim ke server!",
+          );
+        } catch (error) {
+          console.warn(
+            "Auto-Sync TADBIRA: Koneksi tertunda, antrean ditahan otomatis:",
+            error,
+          );
+          break; // Hentikan loop sementara jika server sibuk agar runtutan data tidak rusak
+        }
+      }
+    };
+
+    // Jalankan sinkronisasi instan begitu halaman web dibuka pertama kali
+    triggerGlobalBackgroundSync();
+
+    // Jalankan ulang otomatis jika perangkat terhubung kembali ke internet dari mode offline
+    window.addEventListener("online", triggerGlobalBackgroundSync);
+
+    return () => {
+      window.removeEventListener("online", triggerGlobalBackgroundSync);
+    };
+  }, []);
 
   // Jika belum login, kunci semua akses HANYA ke halaman Login
   if (!user) {
@@ -93,7 +153,7 @@ export default function App() {
           unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
           font-display: swap;
           
-          /* SESUAIKAN UKURAN ARAB: 115% biasanya paling pas saat bersanding dengan Noto Sans */
+          /* SESUAIKAN UKURAN ARAB: 120% biasanya paling pas saat bersanding dengan Noto Sans */
           size-adjust: 120%; 
         }
 
