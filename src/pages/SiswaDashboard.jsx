@@ -426,6 +426,20 @@ const SiswaDashboard = () => {
         const userName = String(getVal(user, "Nama") || "");
         const finalNilai = await api.getNilaiSiswa(userName);
 
+        // --- TAMBAHAN BARU: AMBIL NILAI ANTREAN LOKAL YANG BELUM SEMPAT TERKIRIM ---
+        const queueStr = localStorage.getItem("tadbira_sync_queue");
+        let pendingNilai = [];
+        if (queueStr) {
+          const syncQueue = JSON.parse(queueStr);
+          pendingNilai = syncQueue
+            .filter((q) => q.username === getVal(user, "Username"))
+            .map((q) => q.nilaiData);
+        }
+
+        // Gabungkan nilai dari server dengan nilai yang masih pending di HP
+        const gabunganNilai = [...pendingNilai, ...(finalNilai || [])];
+        // --------------------------------------------------------------------------
+
         let finalJadwal = [];
         if (jadwalRes && jadwalRes.length > 0) {
           finalJadwal = jadwalRes.filter((j) => {
@@ -451,9 +465,11 @@ const SiswaDashboard = () => {
             ? finalJadwal
             : prev,
         );
+
+        // UBAH DARI finalNilai MENJADI gabunganNilai
         setMyResults((prev) =>
-          JSON.stringify(prev) !== JSON.stringify(finalNilai)
-            ? finalNilai
+          JSON.stringify(prev) !== JSON.stringify(gabunganNilai)
+            ? gabunganNilai
             : prev,
         );
 
@@ -464,7 +480,7 @@ const SiswaDashboard = () => {
         );
         localStorage.setItem(
           `tadbira_siswa_nilai_${getVal(user, "Username")}`,
-          JSON.stringify(finalNilai),
+          JSON.stringify(gabunganNilai), // INI JUGA UBAH JADI gabunganNilai
         );
       } catch (err) {
         // Jangan tampilkan pesan error merah jika siswa sudah punya data offline di HP-nya
@@ -1021,8 +1037,8 @@ const SiswaDashboard = () => {
       setIsMobileDrawerOpen(false);
       setActiveTab("nilai");
 
-      // 5. PICU SINKRONISASI KE SERVER CLOUD
-      triggerBackgroundSync();
+      // 5. PICU SINKRONISASI KE SERVER CLOUD (Kirim Sinyal ke App.jsx)
+      window.dispatchEvent(new Event("force-sync"));
 
       // 6. KELUAR FULLSCREEN & MUNCULKAN NOTIF
       try {

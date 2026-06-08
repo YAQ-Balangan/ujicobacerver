@@ -1,10 +1,10 @@
 // src/App.jsx
-import React, { useContext, useEffect } from "react"; // Menambahkan useEffect
+import React, { useContext, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, AuthContext } from "./context/AuthContext";
-import { api } from "./api/api"; // Import API satu tempat, jalur relatif dari src/App.jsx
+import { api } from "./api/api";
 
-// Import halaman-halaman yang sudah dipisahkan
+// Import halaman-halaman yang sudah kita pisahkan
 import LoginPage from "./pages/LoginPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import GuruDashboard from "./pages/GuruDashboard";
@@ -35,7 +35,8 @@ const AppRouter = () => {
   // =================================================================================
   useEffect(() => {
     const triggerGlobalBackgroundSync = async () => {
-      if (!navigator.onLine) return; // Jika perangkat sedang offline, batalkan pengiriman
+      // WAJIB LOGIN UNTUK MENGIRIM KE SUPABASE AGAR TIDAK DITOLAK (RLS)
+      if (!navigator.onLine || !user) return;
 
       const queueStr = localStorage.getItem("tadbira_sync_queue");
       if (!queueStr) return;
@@ -73,21 +74,22 @@ const AppRouter = () => {
             "Auto-Sync TADBIRA: Koneksi tertunda, antrean ditahan otomatis:",
             error,
           );
-          break; // Hentikan loop sementara jika server sibuk agar runtutan data tidak rusak
+          break; // Hentikan loop sementara jika server sibuk
         }
       }
     };
 
-    // Jalankan sinkronisasi instan begitu halaman web dibuka pertama kali
+    // Jalankan setiap kali status koneksi berubah atau USER BARU SAJA LOGIN
     triggerGlobalBackgroundSync();
 
-    // Jalankan ulang otomatis jika perangkat terhubung kembali ke internet dari mode offline
     window.addEventListener("online", triggerGlobalBackgroundSync);
+    window.addEventListener("force-sync", triggerGlobalBackgroundSync); // Sinyal khusus dari tombol kumpul
 
     return () => {
       window.removeEventListener("online", triggerGlobalBackgroundSync);
+      window.removeEventListener("force-sync", triggerGlobalBackgroundSync);
     };
-  }, []);
+  }, [user]); // <--- DEPENDENCY USER (Dipicu ulang saat selesai login)
 
   // Jika belum login, kunci semua akses HANYA ke halaman Login
   if (!user) {
@@ -153,7 +155,7 @@ export default function App() {
           unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
           font-display: swap;
           
-          /* SESUAIKAN UKURAN ARAB: 120% biasanya paling pas saat bersanding dengan Noto Sans */
+          /* SESUAIKAN UKURAN ARAB: 115% biasanya paling pas saat bersanding dengan Noto Sans */
           size-adjust: 120%; 
         }
 
