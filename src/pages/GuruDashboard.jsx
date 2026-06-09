@@ -734,6 +734,59 @@ const GuruDashboard = () => {
     }
   };
 
+  // --- FITUR UNDUH ARSIP LENGKAP TADBIRA ---
+  const unduhRekapitulasiLengkap = async () => {
+    try {
+      alert(
+        "Sedang menarik seluruh data arsip dari server. Proses ini berjalan di latar belakang, mohon tunggu sebentar hingga file otomatis terunduh...",
+      );
+
+      // Memanggil api.read dengan parameter fetchAll = true (Menarik SELURUH DATA tanpa limit)
+      const allDataNilai = await api.read("nilai", true);
+
+      if (!allDataNilai || allDataNilai.length === 0) {
+        alert("Belum ada data nilai yang masuk di server.");
+        return;
+      }
+
+      // 1. Buat Header CSV
+      let csvContent = "data:text/csv;charset=utf-8,";
+      csvContent +=
+        "ID,Nama Siswa,Kelas,Mapel,Skor,Benar,Salah,Total Soal,Status\n";
+
+      // 2. Loop semua data dan masukkan ke baris CSV
+      allDataNilai.forEach((row) => {
+        const baris = [
+          row.id,
+          `"${row.nama_siswa || ""}"`,
+          `"${row.kelas || ""}"`,
+          `"${row.mapel || ""}"`,
+          row.skor,
+          row.benar,
+          row.salah,
+          row.total_soal,
+          `"${row.status || ""}"`,
+        ].join(",");
+        csvContent += baris + "\n";
+      });
+
+      // 3. Paksa Browser Melakukan Download File
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute(
+        "download",
+        `Arsip_Lengkap_TADBIRA_${new Date().toLocaleDateString("id-ID")}.csv`,
+      );
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link); // Bersihkan DOM
+    } catch (error) {
+      console.error("Gagal mengunduh rekap:", error);
+      alert("Gagal mengunduh rekapitulasi: " + error.message);
+    }
+  };
+
   const fetchData = async (isBackground = false) => {
     if (!currentConfig) return;
     if (!isBackground) setLoading(true);
@@ -803,11 +856,16 @@ const GuruDashboard = () => {
         { event: "*", schema: "public", table: "nilai" },
         (payload) => {
           if (payload.eventType === "INSERT") {
-            setAllData((prev) => ({ ...prev, nilai: [payload.new, ...prev.nilai] }));
+            setAllData((prev) => ({
+              ...prev,
+              nilai: [payload.new, ...prev.nilai],
+            }));
           } else if (payload.eventType === "UPDATE") {
             setAllData((prev) => ({
               ...prev,
-              nilai: prev.nilai.map((n) => n.id === payload.new.id ? payload.new : n)
+              nilai: prev.nilai.map((n) =>
+                n.id === payload.new.id ? payload.new : n,
+              ),
             }));
           }
         },
@@ -817,8 +875,11 @@ const GuruDashboard = () => {
         { event: "UPDATE", schema: "public", table: "sesi_ujian" },
         (payload) => {
           setSesiUjianData((prev) => {
-            const exists = prev.find(s => s.id_sesi === payload.new.id_sesi);
-            if (exists) return prev.map(s => s.id_sesi === payload.new.id_sesi ? payload.new : s);
+            const exists = prev.find((s) => s.id_sesi === payload.new.id_sesi);
+            if (exists)
+              return prev.map((s) =>
+                s.id_sesi === payload.new.id_sesi ? payload.new : s,
+              );
             return [...prev, payload.new];
           });
         },
@@ -826,7 +887,9 @@ const GuruDashboard = () => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "soal" },
-        () => { fetchCount(); }
+        () => {
+          fetchCount();
+        },
       )
       .subscribe();
 
@@ -2591,6 +2654,13 @@ Patuhi aturan berikut secara ketat:
 
             {tab === "nilai" && (
               <div className="grid grid-cols-2 md:flex md:flex-wrap w-full md:w-auto gap-2 mt-4 md:mt-0">
+                <button
+                  onClick={unduhRekapitulasiLengkap}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg shadow-md transition-all"
+                >
+                  <Download className="w-4 h-4" />
+                  Unduh Arsip Lengkap (.CSV)
+                </button>
                 <button
                   onClick={() => handleExport("print")}
                   className="flex justify-center items-center gap-2 md:gap-1.5 px-4 py-3 md:py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition-colors shadow-sm w-full md:w-auto"

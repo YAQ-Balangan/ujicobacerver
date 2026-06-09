@@ -502,14 +502,14 @@ const SiswaDashboard = () => {
       .channel("tadbira-realtime-changes")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "Settings" },
+        { event: "*", schema: "public", table: "settings" },
         () => {
           fetchData(true);
         },
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "Jadwal" },
+        { event: "*", schema: "public", table: "jadwal" },
         () => {
           fetchData(true);
         },

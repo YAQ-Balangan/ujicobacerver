@@ -27,14 +27,27 @@ export const api = {
         throw new Error("Gagal Login: Username atau Password Salah");
     },
 
-    // 2. READ (Tarik Data)
-    read: async (sheet) => {
+    // 2. READ (Tarik Data - Smart Limiting & Full Fetch)
+    read: async (sheet, fetchAll = false) => {
         const tableName = sheet.toLowerCase();
-        const { data, error } = await supabase
-            .from(tableName)
-            .select('*')
-            .order('id', { ascending: true });
+        let query = supabase.from(tableName).select('*');
 
+        // Jika meminta semua data (untuk fungsi Unduh Excel/Arsip), lewati batasan
+        if (fetchAll) {
+            query = query.order('id', { ascending: false });
+        } else {
+            // MODE DASHBOARD (Default): Batasi data agar memori tidak penuh & tidak lag
+            if (tableName === 'nilai') {
+                query = query.order('id', { ascending: false }).limit(1000); 
+            } else if (tableName === 'sesi_ujian') {
+                query = query.order('updated_at', { ascending: false }).limit(500); 
+            } else {
+                // Untuk master data yang butuh ditarik utuh (soal, jadwal, mapel, users)
+                query = query.order('id', { ascending: true });
+            }
+        }
+
+        const { data, error } = await query;
         if (error) throw new Error(error.message);
         return data || [];
     },
