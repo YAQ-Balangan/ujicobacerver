@@ -749,12 +749,14 @@ const SiswaDashboard = () => {
 
       let offlineData = [];
       try {
-        offlineData = JSON.parse(offlineRaw);
+        const parsed = JSON.parse(offlineRaw);
+        // Konversi paksa ke array agar mesin kurir tetap mau mengirim data lama
+        offlineData = Array.isArray(parsed) ? parsed : [parsed];
       } catch (e) {
         return;
       }
 
-      if (!Array.isArray(offlineData) || offlineData.length === 0) return;
+      if (offlineData.length === 0) return;
 
       const dataTerkirim = [];
 
@@ -1080,18 +1082,52 @@ const SiswaDashboard = () => {
       // 2. BERSIHKAN JAWABAN DARI MEMORI INTERNAL HP SISWA
       const idUjian = getVal(activeExamRef.current, "ID");
       localStorage.removeItem(`jawaban_${getVal(user, "Username")}_${idUjian}`);
+      // 3. MASUKKAN KE ANTREAN SINKRONISASI LOKAL HP SISWA (Format Array Anti-Stuck)
+      const currentOfflineRaw = localStorage.getItem("tadbira_offline_nilai");
+      let currentOfflineArray = [];
 
-      // 3. MASUKKAN KE ANTREAN SINKRONISASI LOKAL HP SISWA (Format Array Anti-Timpa)
-      const offlineRaw = localStorage.getItem("tadbira_offline_nilai");
-      const offlineArray = offlineRaw ? JSON.parse(offlineRaw) : [];
-      // Pastikan tidak ada data ganda masuk ke antrean
-      if (!offlineArray.some((d) => d.id_ujian === dataNilai.id_ujian)) {
-        offlineArray.push(dataNilai);
-        localStorage.setItem(
-          "tadbira_offline_nilai",
-          JSON.stringify(offlineArray),
-        );
+      try {
+        if (currentOfflineRaw) {
+          const parsed = JSON.parse(currentOfflineRaw);
+          // Pastikan data lama otomatis dikonversi ke array jika strukturnya salah
+          currentOfflineArray = Array.isArray(parsed) ? parsed : [parsed];
+        }
+      } catch (e) {
+        currentOfflineArray = [];
       }
+
+      // Masukkan data baru hanya jika ID ujian belum ada di antrean
+      if (!currentOfflineArray.some((d) => d.id_ujian === dataNilai.id_ujian)) {
+        currentOfflineArray.push(dataNilai);
+      }
+
+      localStorage.setItem(
+        "tadbira_offline_nilai",
+        JSON.stringify(currentOfflineArray),
+      );
+      // 3. MASUKKAN KE ANTREAN SINKRONISASI LOKAL HP SISWA (Format Array Anti-Stuck)
+      const currentOfflineRaw = localStorage.getItem("tadbira_offline_nilai");
+      let currentOfflineArray = [];
+
+      try {
+        if (currentOfflineRaw) {
+          const parsed = JSON.parse(currentOfflineRaw);
+          // Pastikan data lama otomatis dikonversi ke array jika strukturnya salah
+          currentOfflineArray = Array.isArray(parsed) ? parsed : [parsed];
+        }
+      } catch (e) {
+        currentOfflineArray = [];
+      }
+
+      // Masukkan data baru hanya jika ID ujian belum ada di antrean
+      if (!currentOfflineArray.some((d) => d.id_ujian === dataNilai.id_ujian)) {
+        currentOfflineArray.push(dataNilai);
+      }
+
+      localStorage.setItem(
+        "tadbira_offline_nilai",
+        JSON.stringify(currentOfflineArray),
+      );
 
       // 4. RESET STATE INTERFACE UJIAN & PINDAH KE TAB NILAI
       setIsSubmitting(false);
