@@ -427,13 +427,13 @@ const SiswaDashboard = () => {
         const finalNilai = await api.getNilaiSiswa(userName);
 
         // --- TAMBAHAN BARU: AMBIL NILAI ANTREAN LOKAL YANG BELUM SEMPAT TERKIRIM ---
-        const queueStr = localStorage.getItem("tadbira_sync_queue");
+        const queueStr = localStorage.getItem("tadbira_offline_nilai");
         let pendingNilai = [];
         if (queueStr) {
           const syncQueue = JSON.parse(queueStr);
-          pendingNilai = syncQueue
-            .filter((q) => q.username === getVal(user, "Username"))
-            .map((q) => q.nilaiData);
+          pendingNilai = syncQueue.filter(
+            (q) => q.username === getVal(user, "Username"),
+          );
         }
 
         // Gabungkan nilai dari server dengan nilai yang masih pending di HP
@@ -735,17 +735,77 @@ const SiswaDashboard = () => {
     // Sengaja dikosongkan agar menghemat kuota egress data server & HP siswa
   }, []);
 
-  // Pasang pemantau sinyal internet HP secara otomatis (Sudah dibersihkan dari fungsi sync)
+  // Pasang pemantau sinyal internet HP + MESIN AUTO-SYNC HEMAT EGRESS SERVER
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
 
+    const prosesSyncKeServer = async () => {
+      // HEMAT EGRESS: Jika tidak ada sinyal internet, segera matikan fungsi untuk cegah tembakan API sia-sia
+      if (!navigator.onLine) return;
+
+      const offlineRaw = localStorage.getItem("tadbira_offline_nilai");
+      if (!offlineRaw) return;
+
+      let offlineData = [];
+      try {
+        offlineData = JSON.parse(offlineRaw);
+      } catch (e) {
+        return;
+      }
+
+      if (!Array.isArray(offlineData) || offlineData.length === 0) return;
+
+      const dataTerkirim = [];
+
+      for (const payload of offlineData) {
+        try {
+          // 1. Tembak Nilai langsung ke Database TADBIRA
+          const { error: errNilai } = await supabase
+            .from("nilai")
+            .insert([payload]);
+          if (errNilai && errNilai.code !== "23505") throw errNilai; // Abaikan error duplikat (code 23505)
+
+          // 2. Hapus Sesi Ujian agar notifikasi GuruDashboard berubah jadi Selesai
+          await api.deleteSesi(payload.username, payload.id_ujian);
+
+          dataTerkirim.push(payload.id_ujian);
+        } catch (error) {
+          console.warn("Koneksi tidak stabil, menunggu sinyal kembali...");
+        }
+      }
+
+      // 3. Bersihkan memori HP dari data yang SUDAH terkirim saja
+      if (dataTerkirim.length > 0) {
+        const sisaData = offlineData.filter(
+          (d) => !dataTerkirim.includes(d.id_ujian),
+        );
+        if (sisaData.length === 0) {
+          localStorage.removeItem("tadbira_offline_nilai");
+        } else {
+          localStorage.setItem(
+            "tadbira_offline_nilai",
+            JSON.stringify(sisaData),
+          );
+        }
+      }
+    };
+
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
+
+    // Mesin Murni Event-Driven (Tanpa Polling Interval Berulang)
+    window.addEventListener("online", prosesSyncKeServer);
+    window.addEventListener("force-sync", prosesSyncKeServer);
+
+    // Cek satu kali saat pertama buka halaman dashboard
+    prosesSyncKeServer();
 
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", prosesSyncKeServer);
+      window.removeEventListener("force-sync", prosesSyncKeServer);
     };
   }, []);
 
@@ -1021,9 +1081,17 @@ const SiswaDashboard = () => {
       const idUjian = getVal(activeExamRef.current, "ID");
       localStorage.removeItem(`jawaban_${getVal(user, "Username")}_${idUjian}`);
 
-      // 3. MASUKKAN KE ANTREAN SINKRONISASI LOKAL HP SISWA
-      // Kita menggunakan kunci tunggal agar selari dengan mesin Background Sync di App.jsx
-      localStorage.setItem("tadbira_offline_nilai", JSON.stringify(dataNilai));
+      // 3. MASUKKAN KE ANTREAN SINKRONISASI LOKAL HP SISWA (Format Array Anti-Timpa)
+      const offlineRaw = localStorage.getItem("tadbira_offline_nilai");
+      const offlineArray = offlineRaw ? JSON.parse(offlineRaw) : [];
+      // Pastikan tidak ada data ganda masuk ke antrean
+      if (!offlineArray.some((d) => d.id_ujian === dataNilai.id_ujian)) {
+        offlineArray.push(dataNilai);
+        localStorage.setItem(
+          "tadbira_offline_nilai",
+          JSON.stringify(offlineArray),
+        );
+      }
 
       // 4. RESET STATE INTERFACE UJIAN & PINDAH KE TAB NILAI
       setIsSubmitting(false);
