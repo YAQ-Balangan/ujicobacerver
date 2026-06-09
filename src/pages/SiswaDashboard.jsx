@@ -1105,32 +1105,9 @@ const SiswaDashboard = () => {
         "tadbira_offline_nilai",
         JSON.stringify(currentOfflineArray),
       );
-      // 3. MASUKKAN KE ANTREAN SINKRONISASI LOKAL HP SISWA (Format Array Anti-Stuck)
-      const currentOfflineRaw = localStorage.getItem("tadbira_offline_nilai");
-      let currentOfflineArray = [];
-
-      try {
-        if (currentOfflineRaw) {
-          const parsed = JSON.parse(currentOfflineRaw);
-          // Pastikan data lama otomatis dikonversi ke array jika strukturnya salah
-          currentOfflineArray = Array.isArray(parsed) ? parsed : [parsed];
-        }
-      } catch (e) {
-        currentOfflineArray = [];
-      }
-
-      // Masukkan data baru hanya jika ID ujian belum ada di antrean
-      if (!currentOfflineArray.some((d) => d.id_ujian === dataNilai.id_ujian)) {
-        currentOfflineArray.push(dataNilai);
-      }
-
-      localStorage.setItem(
-        "tadbira_offline_nilai",
-        JSON.stringify(currentOfflineArray),
-      );
 
       // 4. RESET STATE INTERFACE UJIAN & PINDAH KE TAB NILAI
-      setIsSubmitting(false);
+      // setIsSubmitting(false);
       setActiveExam(null);
       setAnswers({});
       setRaguRagu({});
