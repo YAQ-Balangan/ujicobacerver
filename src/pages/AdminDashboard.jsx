@@ -586,13 +586,15 @@ const AdminDashboard = () => {
           return {
             ...prev,
             [stateKey]: currentData.map((item) =>
-              item.id === payload.new.id ? payload.new : item
+              item.id === payload.new.id ? payload.new : item,
             ),
           };
         } else if (payload.eventType === "DELETE") {
           return {
             ...prev,
-            [stateKey]: currentData.filter((item) => item.id !== payload.old.id),
+            [stateKey]: currentData.filter(
+              (item) => item.id !== payload.old.id,
+            ),
           };
         }
         return prev;
@@ -604,22 +606,22 @@ const AdminDashboard = () => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "users" }, // <-- Sudah huruf kecil
-        (payload) => handleRealtimePayload(payload, "siswa")
+        (payload) => handleRealtimePayload(payload, "siswa"),
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "jadwal" }, // <-- Sudah huruf kecil
-        (payload) => handleRealtimePayload(payload, "jadwal")
+        (payload) => handleRealtimePayload(payload, "jadwal"),
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "mapel" }, // <-- Sudah huruf kecil
-        (payload) => handleRealtimePayload(payload, "mapel")
+        (payload) => handleRealtimePayload(payload, "mapel"),
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "settings" }, // <-- Sudah huruf kecil
-        (payload) => handleRealtimePayload(payload, "settings")
+        (payload) => handleRealtimePayload(payload, "settings"),
       )
       .subscribe();
 
@@ -797,7 +799,7 @@ const AdminDashboard = () => {
   };
 
   const antiCheatSetting = allData.settings.find(
-    (item) => item.kunci === "Mode_Ujian",
+    (item) => String(item.kunci).toLowerCase() === "mode_ujian",
   );
   const isAntiCheatOn = antiCheatSetting
     ? antiCheatSetting.nilai !== "OFF"
@@ -838,7 +840,7 @@ const AdminDashboard = () => {
   };
 
   const appOnlySetting = allData.settings.find(
-    (item) => item.kunci === "Mode_Aplikasi",
+    (item) => String(item.kunci).toLowerCase() === "mode_aplikasi",
   );
   const isAppOnlyOn = appOnlySetting ? appOnlySetting.nilai === "ON" : false;
   const handleToggleAppOnly = async () => {
@@ -877,7 +879,7 @@ const AdminDashboard = () => {
   };
 
   const deleteAllSetting = allData.settings.find(
-    (item) => item.kunci === "Hapus_Semua_Soal",
+    (item) => String(item.kunci).toLowerCase() === "hapus_semua_soal",
   );
   const isDeleteAllOn = deleteAllSetting
     ? deleteAllSetting.nilai !== "OFF"

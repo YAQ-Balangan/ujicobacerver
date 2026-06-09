@@ -875,12 +875,19 @@ const GuruDashboard = () => {
         { event: "*", schema: "public", table: "sesi_ujian" },
         (payload) => {
           setSesiUjianData((prev) => {
-            const exists = prev.find((s) => s.id_sesi === payload.new.id_sesi);
-            if (exists)
-              return prev.map((s) =>
-                s.id_sesi === payload.new.id_sesi ? payload.new : s,
-              );
-            return [...prev, payload.new];
+            if (payload.eventType === "DELETE") {
+              return prev.filter((s) => s.id_sesi !== payload.old.id_sesi);
+            }
+            if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+              const exists = prev.find((s) => s.id_sesi === payload.new.id_sesi);
+              if (exists) {
+                return prev.map((s) =>
+                  s.id_sesi === payload.new.id_sesi ? payload.new : s
+                );
+              }
+              return [...prev, payload.new];
+            }
+            return prev;
           });
         },
       )

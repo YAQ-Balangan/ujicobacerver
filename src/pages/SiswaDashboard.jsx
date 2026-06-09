@@ -1022,14 +1022,8 @@ const SiswaDashboard = () => {
       localStorage.removeItem(`jawaban_${getVal(user, "Username")}_${idUjian}`);
 
       // 3. MASUKKAN KE ANTREAN SINKRONISASI LOKAL HP SISWA
-      const queueStr = localStorage.getItem("tadbira_sync_queue") || "[]";
-      let syncQueue = JSON.parse(queueStr);
-      syncQueue.push({
-        username: getVal(user, "Username"),
-        idUjian: idUjian,
-        nilaiData: dataNilai,
-      });
-      localStorage.setItem("tadbira_sync_queue", JSON.stringify(syncQueue));
+      // Kita menggunakan kunci tunggal agar selari dengan mesin Background Sync di App.jsx
+      localStorage.setItem("tadbira_offline_nilai", JSON.stringify(dataNilai));
 
       // 4. RESET STATE INTERFACE UJIAN & PINDAH KE TAB NILAI
       setIsSubmitting(false);

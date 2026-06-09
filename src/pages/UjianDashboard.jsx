@@ -555,8 +555,10 @@ const UjianDashboard = () => {
         "postgres_changes",
         { event: "*", schema: "public", table: "sesi_ujian" }, // <-- Ganti event jadi *
         (payload) => {
+          if (payload.eventType === "DELETE") return; // Abaikan event DELETE dari Supabase
+
           const dataBaru = payload.new;
-          if (dataBaru) {
+          if (dataBaru && Object.keys(dataBaru).length > 0) {
             // Hitung ulang progress berdasarkan jawaban_sementara
             let dijawab = 0;
             try {

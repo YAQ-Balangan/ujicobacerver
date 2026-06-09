@@ -2,7 +2,7 @@
 import React, { useContext, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, AuthContext } from "./context/AuthContext";
-import { api } from "./api/api";
+import { api, supabase } from "./api/api";
 
 // Import halaman-halaman yang sudah kita pisahkan
 import LoginPage from "./pages/LoginPage";
@@ -31,65 +31,67 @@ const AppRouter = () => {
   const { user } = useContext(AuthContext);
 
   // =================================================================================
-  // MESIN OTOMATIS: GLOBAL BACKGROUND SYNC (BERJALAN TANPA SYARAT LOGIN)
+  // MESIN OTOMATIS: GLOBAL BACKGROUND SYNC (ANTI-CRASH & AUTOMATIC CLEANUP)
   // =================================================================================
   useEffect(() => {
-    const triggerGlobalBackgroundSync = async () => {
-      // WAJIB LOGIN UNTUK MENGIRIM KE SUPABASE AGAR TIDAK DITOLAK (RLS)
+    const runBackgroundSync = async () => {
+      // Jika tidak ada internet atau belum login, tunda dulu
       if (!navigator.onLine || !user) return;
 
-      const queueStr = localStorage.getItem("tadbira_sync_queue");
-      if (!queueStr) return;
-
-      let syncQueue;
       try {
-        syncQueue = JSON.parse(queueStr);
-      } catch (e) {
-        return;
-      }
+        const offlineData = localStorage.getItem("tadbira_offline_nilai");
+        if (!offlineData) return;
 
-      if (!Array.isArray(syncQueue) || syncQueue.length === 0) return;
+        const dataNilai = JSON.parse(offlineData);
+        
+        // Pastikan data yang tersimpan valid dan punya identitas
+        if (dataNilai && dataNilai.username && dataNilai.id_ujian) {
+          console.log("Menemukan data offline TADBIRA, mencoba sinkronisasi...");
 
-      let remainingQueue = [...syncQueue];
+          // 1. Masukkan nilai siswa ke tabel 'nilai'
+          const { error: errorNilai } = await supabase
+            .from("nilai")
+            .insert([dataNilai]);
 
-      for (let i = 0; i < syncQueue.length; i++) {
-        const item = syncQueue[i];
-        try {
-          // Mengirimkan nilai siswa yang pending ke server database
-          await api.create("Nilai", item.nilaiData);
+          // Jika berhasil masuk, atau ternyata data sudah terlanjur masuk (error duplicate 23505)
+          if (!errorNilai || errorNilai.code === "23505") {
+            
+            // 2. BERSIHKAN RUMAH: Hapus sesi ujian agar di GuruDashboard statusnya berubah jadi SELESAI
+            await supabase
+              .from("sesi_ujian")
+              .delete()
+              .eq("id_sesi", `${dataNilai.username}_${dataNilai.id_ujian}`);
 
-          // Jika sukses dikirim, hapus dari antrean lokal memori HP
-          remainingQueue = remainingQueue.filter(
-            (q) => q.idUjian !== item.idUjian,
-          );
-          localStorage.setItem(
-            "tadbira_sync_queue",
-            JSON.stringify(remainingQueue),
-          );
-          console.log(
-            "Auto-Sync TADBIRA: Nilai pending sukses dikirim ke server!",
-          );
-        } catch (error) {
-          console.warn(
-            "Auto-Sync TADBIRA: Koneksi tertunda, antrean ditahan otomatis:",
-            error,
-          );
-          break; // Hentikan loop sementara jika server sibuk
+            // 3. Hapus antrean di HP siswa agar tidak dikirim berulang
+            localStorage.removeItem("tadbira_offline_nilai");
+            console.log("Sinkronisasi sukses! Data offline berhasil dibersihkan.");
+          } else {
+            console.error("Supabase menolak data offline:", errorNilai.message);
+            // Jika ditolak karena error data fatal, hapus antrean agar tidak bikin macet selamanya
+            if (errorNilai.code.startsWith("22") || errorNilai.code.startsWith("23")) {
+              localStorage.removeItem("tadbira_offline_nilai");
+            }
+          }
+        } else {
+          localStorage.removeItem("tadbira_offline_nilai");
         }
+      } catch (err) {
+        console.error("Mesin sync offline mengalami crash internal:", err);
+        localStorage.removeItem("tadbira_offline_nilai");
       }
     };
 
-    // Jalankan setiap kali status koneksi berubah atau USER BARU SAJA LOGIN
-    triggerGlobalBackgroundSync();
-
-    window.addEventListener("online", triggerGlobalBackgroundSync);
-    window.addEventListener("force-sync", triggerGlobalBackgroundSync); // Sinyal khusus dari tombol kumpul
+    // Jalankan otomatis pemeriksaan setiap 5 detik
+    const syncInterval = setInterval(runBackgroundSync, 5000);
+    window.addEventListener("online", runBackgroundSync);
+    window.addEventListener("force-sync", runBackgroundSync);
 
     return () => {
-      window.removeEventListener("online", triggerGlobalBackgroundSync);
-      window.removeEventListener("force-sync", triggerGlobalBackgroundSync);
+      clearInterval(syncInterval);
+      window.removeEventListener("online", runBackgroundSync);
+      window.removeEventListener("force-sync", runBackgroundSync);
     };
-  }, [user]); // <--- DEPENDENCY USER (Dipicu ulang saat selesai login)
+  }, [user]);
 
   // Jika belum login, kunci semua akses HANYA ke halaman Login
   if (!user) {
