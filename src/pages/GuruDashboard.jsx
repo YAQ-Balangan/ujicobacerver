@@ -872,7 +872,7 @@ const GuruDashboard = () => {
       )
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "sesi_ujian" },
+        { event: "*", schema: "public", table: "sesi_ujian" },
         (payload) => {
           setSesiUjianData((prev) => {
             const exists = prev.find((s) => s.id_sesi === payload.new.id_sesi);

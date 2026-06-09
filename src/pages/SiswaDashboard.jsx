@@ -523,25 +523,26 @@ const SiswaDashboard = () => {
           filter: `username_siswa=eq.${getVal(user, "Username")}`,
         },
         (payload) => {
-          // Ini menggantikan fungsi Polling Buka Kunci dari Guru secara instan!
           const sesiBaru = payload.new;
           if (sesiBaru && sesiBaru.status === "ACTIVE") {
-            setIsLocked(false);
-            isLockedRef.current = false;
-            setTimeLeft(timeLeftRef.current);
+            // CEK REF LOKAL: Pastikan notif hanya muncul jika sebelumnya BENAR-BENAR TERKUNCI
+            if (isLockedRef.current === true) {
+              setIsLocked(false);
+              isLockedRef.current = false;
+              setTimeLeft(timeLeftRef.current);
 
-            // Otomatis paksa fullscreen kembali setelah dibuka kunci
-            try {
-              const docElm = document.documentElement;
-              if (docElm.requestFullscreen)
-                docElm.requestFullscreen().catch(() => {});
-            } catch (e) {}
+              try {
+                const docElm = document.documentElement;
+                if (docElm.requestFullscreen)
+                  docElm.requestFullscreen().catch(() => {});
+              } catch (e) {}
 
-            showAlert(
-              "success",
-              "Kunci Dibuka",
-              "Pengawas telah memaafkan dan membuka kunci ujian Anda. DILARANG KELUAR APLIKASI LAGI!",
-            );
+              showAlert(
+                "success",
+                "Kunci Dibuka",
+                "Pengawas telah memaafkan dan membuka kunci ujian Anda. DILARANG KELUAR APLIKASI LAGI!",
+              );
+            }
           }
         },
       )
@@ -1000,6 +1001,8 @@ const SiswaDashboard = () => {
 
       const dataNilai = {
         id: amanId,
+        username: getVal(user, "Username"), // <--- WAJIB DITAMBAHKAN
+        id_ujian: getVal(activeExamRef.current, "ID"), // <--- WAJIB DITAMBAHKAN
         nama_siswa: getVal(user, "Nama"),
         kelas: getVal(user, "Kelas"),
         mapel: getVal(activeExamRef.current, "Mapel"),

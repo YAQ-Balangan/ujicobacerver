@@ -553,23 +553,49 @@ const UjianDashboard = () => {
       .channel("admin-live-monitoring")
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "sesi_ujian" },
+        { event: "*", schema: "public", table: "sesi_ujian" }, // <-- Ganti event jadi *
         (payload) => {
-          // Buka kunci INSTAN tanpa loading data dari server
           const dataBaru = payload.new;
           if (dataBaru) {
-            setStudentsData((prev) =>
-              prev.map((siswa) =>
+            // Hitung ulang progress berdasarkan jawaban_sementara
+            let dijawab = 0;
+            try {
+              const answers =
+                typeof dataBaru.jawaban_sementara === "string"
+                  ? JSON.parse(dataBaru.jawaban_sementara)
+                  : dataBaru.jawaban_sementara;
+              dijawab = Object.keys(answers || {}).length;
+            } catch (e) {}
+
+            setStudentsData((prev) => {
+              const exists = prev.find(
+                (s) => s.username === dataBaru.username_siswa,
+              );
+              if (!exists) {
+                // Jika siswa baru saja mulai (INSERT), pancing fetch ulang ringan
+                fetchLiveStatus();
+                return prev;
+              }
+
+              return prev.map((siswa) =>
                 siswa.username === dataBaru.username_siswa
                   ? {
                       ...siswa,
                       status:
                         dataBaru.status === "LOCKED" ? "LOCKED" : "WORKING",
                       pelanggaran: dataBaru.pelanggaran,
+                      dijawab: dijawab, // Update indikator soal
+                      progress:
+                        siswa.totalSoal > 0
+                          ? Math.min(
+                              100,
+                              Math.round((dijawab / siswa.totalSoal) * 100),
+                            )
+                          : 0,
                     }
                   : siswa,
-              ),
-            );
+              );
+            });
           }
         },
       )
