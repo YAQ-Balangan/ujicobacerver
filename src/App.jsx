@@ -2,7 +2,7 @@
 import React, { useContext, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, AuthContext } from "./context/AuthContext";
-import { api, supabase } from "./api/api";
+import { api } from "./api/api";
 import { PageSkeleton } from "./components/ui/Ui";
 import {
   readOfflineQueue,
@@ -124,24 +124,19 @@ const AppRouter = () => {
 
         console.log("Menemukan data offline TADBIRA, mencoba sinkronisasi...");
 
-        const { error: errorNilai } = await supabase
-          .from("nilai")
-          .insert([serverPayload]);
+        let nilaiTersimpan = false;
+        try {
+          await api.submitNilai(serverPayload);
+          nilaiTersimpan = true;
+        } catch (errorNilai) {
+          console.error("Supabase menolak data offline:", errorNilai.message);
+        }
 
-        if (!errorNilai || errorNilai.code === "23505") {
+        if (nilaiTersimpan) {
           if (dataNilai.username && dataNilai.id_ujian) {
-            const { error: errorSesi } = await supabase
-              .from("sesi_ujian")
-              .delete()
-              .eq("id_sesi", `${dataNilai.username}_${dataNilai.id_ujian}`);
-            if (errorSesi) {
-              throw new Error(
-                `Nilai tersimpan, tetapi sesi belum terhapus: ${errorSesi.message}`,
-              );
-            }
+            await api.deleteSesi(dataNilai.username, dataNilai.id_ujian);
           }
         } else {
-          console.error("Supabase menolak data offline:", errorNilai.message);
           remainingData.push(dataNilai, ...queueData.slice(index + 1));
           break;
         }

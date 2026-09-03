@@ -9,6 +9,16 @@ const envErrorMessage =
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || "").trim();
 const supabaseKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
 const isSupabaseConfigured = Boolean(supabaseUrl) && Boolean(supabaseKey);
+const sessionWriteQueues = new Map();
+
+const enqueueSessionWrite = (idSesi, operation) => {
+    const previous = sessionWriteQueues.get(idSesi) || Promise.resolve();
+    const next = previous.catch(() => {}).then(operation);
+    sessionWriteQueues.set(idSesi, next.finally(() => {
+        if (sessionWriteQueues.get(idSesi) === next) sessionWriteQueues.delete(idSesi);
+    }));
+    return next;
+};
 
 const createSupabaseFallback = () => {
   const throwConfigError = () => {
@@ -27,6 +37,7 @@ const createSupabaseFallback = () => {
     ilike: () => queryBuilder(),
     in: () => queryBuilder(),
     lt: () => queryBuilder(),
+    range: () => queryBuilder(),
     on: () => ({ subscribe: () => Promise.resolve() }),
     subscribe: () => Promise.resolve(),
   });
@@ -65,26 +76,25 @@ export const api = {
     // 2. READ (Tarik Data - Smart Limiting & Full Fetch)
     read: async (sheet, fetchAll = false) => {
         const tableName = sheet.toLowerCase();
-        let query = supabase.from(tableName).select('*');
-
-        // Jika meminta semua data (untuk fungsi Unduh Excel/Arsip), lewati batasan
-        if (fetchAll) {
-            query = query.order('id', { ascending: false });
-        } else {
-            // MODE DASHBOARD (Default): Batasi data agar memori tidak penuh & tidak lag
-            if (tableName === 'nilai') {
-                query = query.order('id', { ascending: false }).limit(1000); 
+        const pageSize = 1000;
+        const shouldPage = tableName === 'nilai' || fetchAll;
+        const results = [];
+        for (let page = 0; ; page += 1) {
+            let query = supabase.from(tableName).select('*');
+            query = tableName === 'sesi_ujian'
+                ? query.order('updated_at', { ascending: false })
+                : query.order('id', { ascending: tableName !== 'nilai' });
+            if (shouldPage) {
+                query = query.range(page * pageSize, (page + 1) * pageSize - 1);
             } else if (tableName === 'sesi_ujian') {
-                query = query.order('updated_at', { ascending: false }).limit(500); 
-            } else {
-                // Untuk master data yang butuh ditarik utuh (soal, jadwal, mapel, users)
-                query = query.order('id', { ascending: true });
+                query = query.limit(500);
             }
+            const { data, error } = await query;
+            if (error) throw new Error(error.message);
+            results.push(...(data || []));
+            if (!shouldPage || !data || data.length < pageSize) break;
         }
-
-        const { data, error } = await query;
-        if (error) throw new Error(error.message);
-        return data || [];
+        return results;
     },
 
     // 3. CREATE (Buat Data Baru)
@@ -116,7 +126,20 @@ export const api = {
             .from('nilai')
             .insert([payloadData]);
 
-        if (error && error.code !== '23505') throw new Error(error.message);
+        if (!error || error.code === '23505') return;
+        const missingSubmissionColumn =
+            error.code === '42703' || error.code === 'PGRST204';
+        if (!missingSubmissionColumn || !Object.prototype.hasOwnProperty.call(payloadData, 'submission_id')) {
+            throw new Error(error.message);
+        }
+        const legacyPayload = { ...payloadData };
+        delete legacyPayload.submission_id;
+        const { error: retryError } = await supabase
+            .from('nilai')
+            .insert([legacyPayload]);
+        if (retryError && retryError.code !== '23505') {
+            throw new Error(retryError.message);
+        }
     },
 
     // 4. UPDATE (Edit Data)
@@ -183,13 +206,19 @@ export const api = {
 
     // 8. GET NILAI SPESIFIK SISWA (Backend Filtering Anti-Lag)
     getNilaiSiswa: async (namaSiswa) => {
-        const { data, error } = await supabase
-            .from('nilai')
-            .select('*')
-            .ilike('nama_siswa', namaSiswa);
-
-        if (error) throw new Error(error.message);
-        return data || [];
+        const pageSize = 1000;
+        const results = [];
+        for (let page = 0; ; page += 1) {
+            const { data, error } = await supabase
+                .from('nilai')
+                .select('*')
+                .ilike('nama_siswa', namaSiswa)
+                .range(page * pageSize, (page + 1) * pageSize - 1);
+            if (error) throw new Error(error.message);
+            results.push(...(data || []));
+            if (!data || data.length < pageSize) break;
+        }
+        return results;
     },
 
     // ========================================================
@@ -198,8 +227,9 @@ export const api = {
 
     // Auto-Save setiap 15 Detik & Saat Pindah Soal (Optimasi Jalur Kilat 300 Siswa)
     saveSesi: async (username, idUjian, jawaban, sisaWaktu, pelanggaran = 0, statusSesi = 'ACTIVE') => {
-        try {
-            const idSesi = `${username}_${idUjian}`;
+        const idSesi = `${username}_${idUjian}`;
+        return enqueueSessionWrite(idSesi, async () => {
+          try {
             const waktuSekarang = new Date().toISOString();
             const jawabanString = typeof jawaban === 'string' ? jawaban : JSON.stringify(jawaban);
 
@@ -219,10 +249,11 @@ export const api = {
                 .from('sesi_ujian')
                 .upsert(payload, { onConflict: 'id_sesi' });
 
-            if (error) console.error("Upsert error:", error.message);
-        } catch (error) {
-            console.error("Gagal save sesi ujian:", error);
-        }
+            if (error) throw new Error(error.message);
+          } catch (error) {
+              console.error("Gagal save sesi ujian:", error);
+          }
+        });
     },
 
     // Tarik progres sebelumnya saat Siswa mulai/melanjutkan ujian
@@ -268,12 +299,13 @@ export const api = {
     // SISWA: Menghapus sesi setelah ujian berhasil dikumpul agar reset
     deleteSesi: async (username, idUjian) => {
         const idSesi = `${username}_${idUjian}`;
-        const { error } = await supabase
-            .from('sesi_ujian')
-            .delete()
-            .eq('id_sesi', idSesi);
-
-        if (error) throw new Error(error.message);
+        return enqueueSessionWrite(idSesi, async () => {
+            const { error } = await supabase
+                .from('sesi_ujian')
+                .delete()
+                .eq('id_sesi', idSesi);
+            if (error) throw new Error(error.message);
+        });
     },
 
     cleanupStaleSesi: async () => {

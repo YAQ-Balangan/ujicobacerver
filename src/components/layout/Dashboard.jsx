@@ -126,8 +126,19 @@ const Dashboard = ({
               {menu.find((m) => m.id === active)?.label || "Dashboard"}
             </h2>
           </div>
-          <div className="hidden md:block">
-            <Badge type={user?.role || "guest"} />
+          <div className="flex items-center gap-2">
+            <div className="hidden md:block">
+              <Badge type={user?.role || "guest"} />
+            </div>
+            <button
+              type="button"
+              onClick={logout}
+              aria-label="Keluar Sistem"
+              className="lg:hidden flex items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-black text-red-600 shadow-sm active:translate-y-px"
+            >
+              <LogOut size={16} />
+              <span>Keluar</span>
+            </button>
           </div>
         </header>
 

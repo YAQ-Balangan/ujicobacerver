@@ -123,7 +123,7 @@ const fontClasses = {
 /// ==========================================
 // KOMPONEN TIMER INDEPENDEN (ANTI-BUG LOADING)
 // ==========================================
-const ExamTimer = React.memo(({ initialTime, onTick, onTimeChange, onTimeUp, timeRef, enabled = true }) => {
+const ExamTimer = React.memo(({ initialTime, onTick, onTimeChange, onTimeUp, timeRef, enabled = true, className = "" }) => {
   const [timeLeft, setTimeLeft] = useState(initialTime);
   const hasStarted = useRef(false); // Otak timer agar tahu kapan mulai
 
@@ -182,7 +182,7 @@ const ExamTimer = React.memo(({ initialTime, onTick, onTimeChange, onTimeUp, tim
 
   return (
     <div
-      className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-xl border shadow-sm transition-colors ${enabled && timeLeft < 300 ? "bg-red-50 text-red-600 border-red-200" : "bg-slate-800 text-white border-slate-700"}`}
+      className={`shrink-0 flex items-center gap-2 px-3 md:px-4 py-2 rounded-xl border shadow-sm transition-colors ${className} ${enabled && timeLeft < 300 ? "bg-red-50 text-red-600 border-red-200" : "bg-slate-800 text-white border-slate-700"}`}
     >
       <Timer size={18} />
       <div className="flex flex-col">
@@ -747,6 +747,12 @@ const SiswaDashboard = () => {
       }
     };
 
+    const handlePageHide = () => {
+      if (activeExamRef.current && !isSubmittingRef.current) {
+        triggerLock("Halaman ujian ditinggalkan");
+      }
+    };
+
     // FUNGSI BARU: Menangkap Swipe/Back HP
     const handlePopState = (e) => {
       if (activeExamRef.current && !isSubmittingRef.current) {
@@ -758,6 +764,31 @@ const SiswaDashboard = () => {
       }
     };
 
+    const handleContextMenu = (event) => {
+      if (activeExamRef.current) event.preventDefault();
+    };
+
+    const handleClipboard = (event) => {
+      if (activeExamRef.current) event.preventDefault();
+    };
+
+    const handleDragOrSelection = (event) => {
+      if (activeExamRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+
+    const handleExamShortcut = (event) => {
+      if (!activeExamRef.current) return;
+      const key = String(event.key || "").toLowerCase();
+      const blockedShortcut =
+        event.key === "F12" ||
+        (event.ctrlKey || event.metaKey) &&
+          ["a", "c", "p", "s", "u", "v", "x"].includes(key);
+      if (blockedShortcut) event.preventDefault();
+    };
+
     window.addEventListener("resize", handleResize);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("blur", handleBlur);
@@ -767,6 +798,14 @@ const SiswaDashboard = () => {
     document.addEventListener("msfullscreenchange", handleFullscreenChange);
     window.addEventListener("beforeunload", handleBeforeUnload);
     window.addEventListener("popstate", handlePopState); // <-- Listener Swipe Aktif
+    document.addEventListener("contextmenu", handleContextMenu);
+    document.addEventListener("copy", handleClipboard);
+    document.addEventListener("cut", handleClipboard);
+    document.addEventListener("paste", handleClipboard);
+    document.addEventListener("dragstart", handleDragOrSelection);
+    document.addEventListener("selectstart", handleDragOrSelection);
+    window.addEventListener("keydown", handleExamShortcut, { capture: true });
+    window.addEventListener("pagehide", handlePageHide);
 
     return () => {
       window.removeEventListener("resize", handleResize);
@@ -787,6 +826,14 @@ const SiswaDashboard = () => {
       );
       window.removeEventListener("beforeunload", handleBeforeUnload);
       window.removeEventListener("popstate", handlePopState); // <-- Listener Swipe Dimatikan
+      document.removeEventListener("contextmenu", handleContextMenu);
+      document.removeEventListener("copy", handleClipboard);
+      document.removeEventListener("cut", handleClipboard);
+      document.removeEventListener("paste", handleClipboard);
+      document.removeEventListener("dragstart", handleDragOrSelection);
+      document.removeEventListener("selectstart", handleDragOrSelection);
+      window.removeEventListener("keydown", handleExamShortcut, { capture: true });
+      window.removeEventListener("pagehide", handlePageHide);
     };
   }, [user]);
 
@@ -1350,6 +1397,7 @@ const SiswaDashboard = () => {
       <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white flex-col p-6 z-[9999] fixed inset-0 select-none overflow-y-auto">
         <div className="hidden">
           <ExamTimer
+            className="shrink-0"
             initialTime={timeLeft}
             timeRef={timeLeftRef}
             onTimeChange={setTimeLeft}
@@ -1554,6 +1602,7 @@ const SiswaDashboard = () => {
             )}
 
             <ExamTimer
+              className="shrink-0"
               initialTime={timeLeft}
               timeRef={timeLeftRef}
               onTimeChange={setTimeLeft}
