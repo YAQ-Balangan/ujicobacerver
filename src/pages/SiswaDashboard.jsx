@@ -41,6 +41,7 @@ import {
   createStableSubmissionId,
   enqueueOfflineSubmission,
   readOfflineQueue,
+  writeOfflineQueue,
 } from "../utils/offlineQueue";
 import { findSetting, isSettingEnabled } from "../utils/settings";
 
@@ -466,15 +467,53 @@ const SiswaDashboard = () => {
 
         if (activeExamRef.current) return; // Abaikan tarik jadwal kalau siswa sedang mengerjakan soal
 
+        const username = getVal(user, "Username");
+        const pendingNilai = readOfflineQueue(username);
+        let pendingAfterSync = pendingNilai;
+        if (navigator.onLine && pendingNilai.length > 0) {
+          pendingAfterSync = [];
+          for (const pending of pendingNilai) {
+            const serverPayload = {
+              ...pending,
+              id: Number(pending.id) || Date.now(),
+              submission_id: pending.submission_id || undefined,
+              skor: Number(pending.skor ?? 0),
+              benar: Number(pending.benar ?? 0),
+              salah: Number(pending.salah ?? 0),
+              total_soal: Number(pending.total_soal ?? 0),
+              detail_jawaban:
+                typeof pending.detail_jawaban === "string"
+                  ? pending.detail_jawaban
+                  : JSON.stringify(pending.detail_jawaban || []),
+            };
+            try {
+              await api.submitNilai(serverPayload);
+              if (pending.username && pending.id_ujian) {
+                await api.deleteSesi(pending.username, pending.id_ujian);
+              }
+            } catch (syncError) {
+              console.warn(
+                "Nilai offline belum tersinkron, tetap disimpan di perangkat:",
+                syncError,
+              );
+              pendingAfterSync.push(pending);
+            }
+          }
+          writeOfflineQueue(username, pendingAfterSync);
+        }
+
         const jadwalRes = await api.read("Jadwal");
         const userName = String(getVal(user, "Nama") || "");
         const finalNilai = await api.getNilaiSiswa(userName);
-        const pendingNilai = readOfflineQueue(getVal(user, "Username"));
-        // Server is authoritative whenever the request succeeds. Pending records
-        // remain in local storage for retry, but must not look like saved results.
-        const gabunganNilai = navigator.onLine
-          ? (finalNilai || [])
-          : [...pendingNilai, ...(finalNilai || [])];
+        const serverIds = new Set(
+          (finalNilai || []).map(
+            (result) => result.submission_id || result.id,
+          ),
+        );
+        const unsyncedVisible = pendingAfterSync.filter(
+          (result) => !serverIds.has(result.submission_id || result.id),
+        );
+        const gabunganNilai = [...unsyncedVisible, ...(finalNilai || [])];
 
         let finalJadwal = [];
         if (jadwalRes && jadwalRes.length > 0) {
@@ -1232,7 +1271,14 @@ const SiswaDashboard = () => {
       // Hasil lokal hanya boleh tampil sebagai nilai ketika sudah tersimpan
       // atau perangkat memang sedang offline untuk dilanjutkan sinkronisasinya.
       if (hasilTersimpanDiServer || !navigator.onLine) {
-        setMyResults((prev) => [dataNilai, ...prev]);
+        setMyResults((prev) => {
+          const nextResults = [dataNilai, ...prev];
+          localStorage.setItem(
+            `tadbira_siswa_nilai_${getVal(user, "Username")}`,
+            JSON.stringify(nextResults),
+          );
+          return nextResults;
+        });
       }
 
       // RESET STATE INTERFACE UJIAN & PINDAH KE TAB NILAI

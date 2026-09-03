@@ -122,24 +122,29 @@ export const api = {
     },
 
     submitNilai: async (payloadData) => {
-        const { error } = await supabase
-            .from('nilai')
-            .insert([payloadData]);
+        let payload = { ...payloadData };
+        for (let attempt = 0; attempt < 6; attempt += 1) {
+            const { error } = await supabase
+                .from('nilai')
+                .insert([payload]);
 
-        if (!error || error.code === '23505') return;
-        const missingSubmissionColumn =
-            error.code === '42703' || error.code === 'PGRST204';
-        if (!missingSubmissionColumn || !Object.prototype.hasOwnProperty.call(payloadData, 'submission_id')) {
-            throw new Error(error.message);
+            if (!error || error.code === '23505') return;
+            const missingColumn = error.code === '42703' || error.code === 'PGRST204';
+            if (!missingColumn) throw new Error(error.message);
+
+            const columnMatch = error.message.match(
+                /(?:the ['"]|column ['"])([A-Za-z0-9_]+)['"] column/i,
+            );
+            const missingColumnName = columnMatch?.[1];
+            if (
+                !missingColumnName ||
+                !Object.prototype.hasOwnProperty.call(payload, missingColumnName)
+            ) {
+                throw new Error(error.message);
+            }
+            delete payload[missingColumnName];
         }
-        const legacyPayload = { ...payloadData };
-        delete legacyPayload.submission_id;
-        const { error: retryError } = await supabase
-            .from('nilai')
-            .insert([legacyPayload]);
-        if (retryError && retryError.code !== '23505') {
-            throw new Error(retryError.message);
-        }
+        throw new Error("Kolom nilai tidak kompatibel setelah beberapa percobaan.");
     },
 
     // 4. UPDATE (Edit Data)
