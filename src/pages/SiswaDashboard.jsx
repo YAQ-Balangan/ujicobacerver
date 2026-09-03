@@ -200,6 +200,7 @@ const ExamTimer = React.memo(({ initialTime, onTick, onTimeChange, onTimeUp, tim
 
 const SiswaDashboard = () => {
   const { user } = useContext(AuthContext);
+  const userUsername = String(getVal(user, "Username") || "").trim();
   const [activeTab, setActiveTab] = useState("home");
   const [loading, setLoading] = useState(true);
   const [isAppBlocked, setIsAppBlocked] = useState(false);
@@ -364,7 +365,7 @@ const SiswaDashboard = () => {
         updatedAt: new Date().toISOString(),
       }),
     );
-  }, [activeExam, activeAttempt, answers, timeLeft, pelanggaran, isLocked, user]);
+  }, [activeExam, activeAttempt, answers, timeLeft, pelanggaran, isLocked, userUsername]);
   useEffect(() => {
     if (soalData && soalData.length > 0) {
       soalData.forEach((soal) => {
@@ -626,7 +627,7 @@ const SiswaDashboard = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, userKelasFull, userTingkat, userJurusan, userTingkatJurusan]);
+  }, [userUsername, userKelasFull, userTingkat, userJurusan, userTingkatJurusan]);
 
   // ==============================================================
   // 2. LOGIKA ANTI-CHEAT SUPER KETAT (Keluar, ESC, Overlay & Refresh)
@@ -873,12 +874,50 @@ const SiswaDashboard = () => {
       window.removeEventListener("keydown", handleExamShortcut, { capture: true });
       window.removeEventListener("pagehide", handlePageHide);
     };
-  }, [user]);
+  }, [userUsername]);
 
-  // 3. POLLING BUKA KUNCI DARI GURU (NON-AKTIF: SUDAH DIGANTI REALTIME SUPABASE DI LANGKAH 2)
+  // 3. Fallback polling buka kunci. Realtime tetap digunakan, tetapi polling
+  // menjamin browser yang kehilangan WebSocket tetap menerima keputusan guru.
   useEffect(() => {
-    // Sengaja dikosongkan agar menghemat kuota egress data server & HP siswa
-  }, []);
+    if (!activeExam || !isLocked || !userUsername) return undefined;
+
+    let cancelled = false;
+    const checkUnlock = async () => {
+      try {
+        const examId = getVal(activeExam, "ID");
+        const sesi = await api.getSesi(userUsername, examId);
+        if (cancelled || !sesi || sesi.status !== "ACTIVE") return;
+
+        isLockedRef.current = false;
+        setIsLocked(false);
+        localStorage.setItem(
+          `status_ujian_${userUsername}_${examId}`,
+          JSON.stringify({
+            answers: answersRef.current,
+            sisaWaktu: timeLeftRef.current,
+            pelanggaran: Number(sesi.pelanggaran || pelanggaranRef.current || 0),
+            isLocked: false,
+            attempt: activeAttempt,
+            updatedAt: new Date().toISOString(),
+          }),
+        );
+        showAlert(
+          "success",
+          "Kunci Dibuka",
+          "Pengawas telah membuka kunci ujian Anda. Silakan lanjutkan dengan tertib.",
+        );
+      } catch (error) {
+        console.warn("Gagal memeriksa status buka kunci:", error);
+      }
+    };
+
+    checkUnlock();
+    const intervalId = window.setInterval(checkUnlock, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activeExam, activeAttempt, isLocked, userUsername, showAlert]);
 
   // Pasang pemantau sinyal internet HP.
   // Sinkronisasi antrean ditangani oleh mesin global di App.jsx agar tidak terjadi
@@ -919,11 +958,23 @@ const SiswaDashboard = () => {
         "Akses DITOLAK. Silakan periksa kembali token ujian Anda.",
       );
 
-    const examResults = myResults.filter(
-      (res) =>
-        String(getVal(res, "ID_Ujian") || getVal(res, "id_ujian")) ===
-        String(examId),
-    );
+    const studentName = String(getVal(user, "Nama") || "").trim().toUpperCase();
+    const examResults = myResults.filter((res) => {
+      const resultExamId = getVal(res, "ID_Ujian") || getVal(res, "id_ujian");
+      if (resultExamId !== undefined && resultExamId !== null && resultExamId !== "") {
+        return String(resultExamId) === String(examId);
+      }
+
+      // Older nilai tables do not have an exam identifier. Keep those results
+      // visible and enforce the best available match using student and subject.
+      const resultName = String(getVal(res, "Nama_Siswa") || getVal(res, "nama_siswa") || "")
+        .trim()
+        .toUpperCase();
+      const resultMapel = String(getVal(res, "Mapel") || getVal(res, "mapel") || "")
+        .trim()
+        .toUpperCase();
+      return resultName === studentName && resultMapel === String(examMapel).trim().toUpperCase();
+    });
     const completedAttempts = examResults.filter(
       (res) =>
         !String(getVal(res, "Status"))
@@ -1110,18 +1161,19 @@ const SiswaDashboard = () => {
               if (Number.isFinite(Number(localSnapshot.sisaWaktu))) {
                 finalTimeLeft = Math.max(0, Number(localSnapshot.sisaWaktu));
               }
-              setPelanggaran(
-                Math.max(
-                  Number(serverSession.pelanggaran || 0),
-                  Number(localSnapshot.pelanggaran || 0),
-                ),
-              );
-              setIsLocked(localSnapshot.isLocked === true);
-              pelanggaranRef.current = Math.max(
+              const effectivePelanggaran = Math.max(
                 Number(serverSession.pelanggaran || 0),
                 Number(localSnapshot.pelanggaran || 0),
               );
-              isLockedRef.current = localSnapshot.isLocked === true;
+              if (pelanggaranRef.current !== effectivePelanggaran) {
+                pelanggaranRef.current = effectivePelanggaran;
+                setPelanggaran(effectivePelanggaran);
+              }
+              const effectiveLocked = localSnapshot.isLocked === true;
+              if (isLockedRef.current !== effectiveLocked) {
+                isLockedRef.current = effectiveLocked;
+                setIsLocked(effectiveLocked);
+              }
             }
           } catch (error) {
             console.warn("Gagal membandingkan snapshot sesi lokal:", error);
@@ -1169,11 +1221,10 @@ const SiswaDashboard = () => {
         const sesiPelanggaran = serverSession
           ? Number(serverSession.pelanggaran || 0)
           : Number(pelanggaranRef.current || 0);
-        const sesiStatus = serverSession
-          ? serverSession.status
-          : isLockedRef.current
+        const sesiStatus =
+          isLockedRef.current || serverSession?.status === "LOCKED"
             ? "LOCKED"
-            : "ACTIVE";
+            : serverSession?.status || "ACTIVE";
         await api.saveSesi(
           getVal(user, "Username"),
           examId,
@@ -1384,10 +1435,8 @@ const SiswaDashboard = () => {
 
   const handleEmergencyUnlock = async (pin) => {
     if (pin !== "123456" || !activeExamRef.current) return;
-
     setIsLocked(false);
     isLockedRef.current = false;
-
     const usernameSiswa = getVal(user, "Username");
     const examId = getVal(activeExamRef.current, "ID");
     localStorage.setItem(
@@ -1472,7 +1521,6 @@ const SiswaDashboard = () => {
             className="shrink-0"
             initialTime={timeLeft}
             timeRef={timeLeftRef}
-            onTimeChange={setTimeLeft}
             enabled={isExamTimerActive}
             onTick={(newTime) => {
               if (activeExamRef.current && navigator.onLine) {
@@ -1677,7 +1725,6 @@ const SiswaDashboard = () => {
               className="shrink-0"
               initialTime={timeLeft}
               timeRef={timeLeftRef}
-              onTimeChange={setTimeLeft}
               enabled={isExamTimerActive}
               onTick={(newTime) => {
                 // TAMBAHAN: Cek !isSubmittingRef.current agar timer berhenti nge-save saat dikumpulkan

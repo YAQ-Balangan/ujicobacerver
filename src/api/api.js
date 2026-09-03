@@ -332,7 +332,17 @@ export const api = {
                 .eq('id_ujian', sesi.id_ujian)
                 .limit(1);
 
-            if (nilaiError) throw new Error(nilaiError.message);
+            if (nilaiError) {
+                const missingColumn =
+                    nilaiError.code === '42703' || nilaiError.code === 'PGRST204';
+                if (missingColumn) {
+                    console.warn(
+                        'Cleanup sesi dilewati karena skema nilai belum memiliki kolom penghubung.',
+                    );
+                    return deletedCount;
+                }
+                throw new Error(nilaiError.message);
+            }
             if (!nilai || nilai.length === 0) continue;
 
             const { error: deleteError } = await supabase
