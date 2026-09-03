@@ -469,13 +469,12 @@ const SiswaDashboard = () => {
         const jadwalRes = await api.read("Jadwal");
         const userName = String(getVal(user, "Nama") || "");
         const finalNilai = await api.getNilaiSiswa(userName);
-
-        // --- TAMBAHAN BARU: AMBIL NILAI ANTREAN LOKAL YANG BELUM SEMPAT TERKIRIM ---
         const pendingNilai = readOfflineQueue(getVal(user, "Username"));
-
-        // Gabungkan nilai dari server dengan nilai yang masih pending di HP
-        const gabunganNilai = [...pendingNilai, ...(finalNilai || [])];
-        // --------------------------------------------------------------------------
+        // Server is authoritative whenever the request succeeds. Pending records
+        // remain in local storage for retry, but must not look like saved results.
+        const gabunganNilai = navigator.onLine
+          ? (finalNilai || [])
+          : [...pendingNilai, ...(finalNilai || [])];
 
         let finalJadwal = [];
         if (jadwalRes && jadwalRes.length > 0) {
@@ -1210,20 +1209,18 @@ const SiswaDashboard = () => {
         detail_jawaban: JSON.stringify(detailJawabanArray),
       };
 
-      // 1. OPTIMISTIC UI: LANGSUNG MASUKKAN NILAI KE LAYAR HP SISWA (Tanpa nunggu server!)
-      setMyResults((prev) => [dataNilai, ...prev]);
-
-      // 2. BERSIHKAN JAWABAN DARI MEMORI INTERNAL HP SISWA
+      // Hapus snapshot jawaban setelah hasil final dibuat.
       const idUjian = getVal(activeExamRef.current, "ID");
       localStorage.removeItem(`jawaban_${getVal(user, "Username")}_${idUjian}`);
       localStorage.removeItem(
         `status_ujian_${getVal(user, "Username")}_${idUjian}`,
       );
-      // 3. MASUKKAN KE ANTREAN SINKRONISASI LOKAL HP SISWA (Format Array Anti-Stuck)
+      let hasilTersimpanDiServer = false;
       if (navigator.onLine) {
         try {
           await api.submitNilai(dataNilai);
           await api.deleteSesi(username, examId);
+          hasilTersimpanDiServer = true;
         } catch (error) {
           console.warn("Nilai belum tersinkron, masuk antrean offline:", error);
           enqueueOfflineSubmission(username, dataNilai);
@@ -1232,7 +1229,13 @@ const SiswaDashboard = () => {
         enqueueOfflineSubmission(username, dataNilai);
       }
 
-      // 4. RESET STATE INTERFACE UJIAN & PINDAH KE TAB NILAI
+      // Hasil lokal hanya boleh tampil sebagai nilai ketika sudah tersimpan
+      // atau perangkat memang sedang offline untuk dilanjutkan sinkronisasinya.
+      if (hasilTersimpanDiServer || !navigator.onLine) {
+        setMyResults((prev) => [dataNilai, ...prev]);
+      }
+
+      // RESET STATE INTERFACE UJIAN & PINDAH KE TAB NILAI
       // setIsSubmitting(false);
       setActiveExam(null);
       setAnswers({});
