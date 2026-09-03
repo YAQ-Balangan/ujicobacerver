@@ -1102,11 +1102,26 @@ const SiswaDashboard = () => {
               (!serverSession.updated_at ||
                 new Date(localSnapshot.updatedAt).getTime() >
                   new Date(serverSession.updated_at).getTime());
-            if (localIsNewer) {
+            const localLockIsStronger =
+              localSnapshot.isLocked === true &&
+              serverSession.status !== "DISQUALIFIED";
+            if (localIsNewer || localLockIsStronger) {
               if (localSnapshot.answers) finalAnswers = localSnapshot.answers;
               if (Number.isFinite(Number(localSnapshot.sisaWaktu))) {
                 finalTimeLeft = Math.max(0, Number(localSnapshot.sisaWaktu));
               }
+              setPelanggaran(
+                Math.max(
+                  Number(serverSession.pelanggaran || 0),
+                  Number(localSnapshot.pelanggaran || 0),
+                ),
+              );
+              setIsLocked(localSnapshot.isLocked === true);
+              pelanggaranRef.current = Math.max(
+                Number(serverSession.pelanggaran || 0),
+                Number(localSnapshot.pelanggaran || 0),
+              );
+              isLockedRef.current = localSnapshot.isLocked === true;
             }
           } catch (error) {
             console.warn("Gagal membandingkan snapshot sesi lokal:", error);
@@ -1151,13 +1166,21 @@ const SiswaDashboard = () => {
         // =============================================================
       }
       try {
+        const sesiPelanggaran = serverSession
+          ? Number(serverSession.pelanggaran || 0)
+          : Number(pelanggaranRef.current || 0);
+        const sesiStatus = serverSession
+          ? serverSession.status
+          : isLockedRef.current
+            ? "LOCKED"
+            : "ACTIVE";
         await api.saveSesi(
           getVal(user, "Username"),
           examId,
           finalAnswers,
           finalTimeLeft,
-          serverSession ? serverSession.pelanggaran : 0,
-          serverSession ? serverSession.status : "ACTIVE",
+          sesiPelanggaran,
+          sesiStatus,
         );
       } catch (e) {
         console.error("Gagal sinkron awal sesi ujian:", e);
