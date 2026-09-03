@@ -22,7 +22,6 @@ const ModalImportMassal = ({
   parsedBulkData,
   handleParseBulkText,
   handleSaveBulk,
-  LatexComponent,
 }) => {
   if (!isOpen) return null;
 
@@ -60,7 +59,7 @@ const ModalImportMassal = ({
                 options={
                   mapelOptions.length > 0
                     ? mapelOptions.map((opt) => ({ label: opt, value: opt }))
-                    : [{ label: "Memuat Data...", value: "" }]
+                    : [{ label: "Menyiapkan pilihan...", value: "" }]
                 }
                 placeholder="Pilih Mata Pelajaran..."
                 disabled={isSaving || mapelOptions.length === 0}

@@ -142,7 +142,7 @@ const ModalSoalManual = ({
                   options={
                     mapelOptions.length > 0
                       ? mapelOptions.map((opt) => ({ label: opt, value: opt }))
-                      : [{ label: "Memuat Data...", value: "" }]
+                      : [{ label: "Menyiapkan pilihan...", value: "" }]
                   }
                   placeholder="Pilih Mapel..."
                   disabled={isSaving || mapelOptions.length === 0}

@@ -33,10 +33,16 @@ import {
 import { AuthContext } from "../context/AuthContext";
 import { api, supabase } from "../api/api";
 import Dashboard from "../components/layout/Dashboard";
-import { Card, Badge } from "../components/ui/Ui";
+import { Card, Badge, TableSkeleton } from "../components/ui/Ui";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import "katex/dist/katex.min.css";
 import renderMathInElement from "katex/contrib/auto-render";
+import {
+  createStableSubmissionId,
+  enqueueOfflineSubmission,
+  readOfflineQueue,
+} from "../utils/offlineQueue";
+import { findSetting, isSettingEnabled } from "../utils/settings";
 
 // ==========================================
 // KOMPONEN RENDERER LATEX CUSTOM (REACT 19 SAFE)
@@ -117,7 +123,7 @@ const fontClasses = {
 /// ==========================================
 // KOMPONEN TIMER INDEPENDEN (ANTI-BUG LOADING)
 // ==========================================
-const ExamTimer = React.memo(({ initialTime, onTick, onTimeUp, timeRef }) => {
+const ExamTimer = React.memo(({ initialTime, onTick, onTimeChange, onTimeUp, timeRef, enabled = true }) => {
   const [timeLeft, setTimeLeft] = useState(initialTime);
   const hasStarted = useRef(false); // Otak timer agar tahu kapan mulai
 
@@ -128,16 +134,17 @@ const ExamTimer = React.memo(({ initialTime, onTick, onTimeUp, timeRef }) => {
 
   // LOGIKA COUNTDOWN MURNI
   useEffect(() => {
-    if (timeLeft <= 0) return;
+    if (!enabled || timeLeft <= 0) return;
     const timerId = setInterval(() => {
       setTimeLeft((prev) => prev - 1);
     }, 1000);
     return () => clearInterval(timerId);
-  }, [timeLeft]);
+  }, [timeLeft, enabled]);
 
   // LOGIKA PENYIMPANAN SESI & WAKTU HABIS
   useEffect(() => {
     if (timeRef) timeRef.current = timeLeft;
+    if (onTimeChange) onTimeChange(timeLeft);
 
     // Tandai bahwa waktu ujian yang sebenarnya (> 0) sudah diterima timer
     if (timeLeft > 0) {
@@ -145,7 +152,7 @@ const ExamTimer = React.memo(({ initialTime, onTick, onTimeUp, timeRef }) => {
     }
 
     // Timer HANYA boleh bereaksi JIKA sudah pernah berjalan normal
-    if (hasStarted.current) {
+    if (enabled && hasStarted.current) {
       // Auto-save waktu ke server setiap 60 detik (menghemat 75% request)
       if (timeLeft > 0 && timeLeft % 60 === 0 && timeLeft !== initialTime) {
         onTick(timeLeft);
@@ -162,7 +169,7 @@ const ExamTimer = React.memo(({ initialTime, onTick, onTimeUp, timeRef }) => {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLeft, initialTime]);
+  }, [timeLeft, initialTime, enabled]);
 
   const formatTime = (seconds) => {
     const h = Math.floor(seconds / 3600);
@@ -175,7 +182,7 @@ const ExamTimer = React.memo(({ initialTime, onTick, onTimeUp, timeRef }) => {
 
   return (
     <div
-      className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-xl border shadow-sm transition-colors ${timeLeft < 300 ? "bg-red-50 text-red-600 border-red-200" : "bg-slate-800 text-white border-slate-700"}`}
+      className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-xl border shadow-sm transition-colors ${enabled && timeLeft < 300 ? "bg-red-50 text-red-600 border-red-200" : "bg-slate-800 text-white border-slate-700"}`}
     >
       <Timer size={18} />
       <div className="flex flex-col">
@@ -183,7 +190,7 @@ const ExamTimer = React.memo(({ initialTime, onTick, onTimeUp, timeRef }) => {
           Sisa Waktu
         </span>
         <span className="font-black text-sm md:text-base leading-none tracking-wider">
-          {formatTime(timeLeft)}
+          {enabled ? formatTime(timeLeft) : "TANPA BATAS"}
         </span>
       </div>
     </div>
@@ -208,8 +215,29 @@ const SiswaDashboard = () => {
 
   const [exams, setExams] = useState([]);
   const [myResults, setMyResults] = useState([]);
+  const scoreInsights = useMemo(() => {
+    const grouped = myResults.reduce((groups, result) => {
+      const subject = getVal(result, "Mapel") || "Ujian";
+      const score = Number(getVal(result, "Skor"));
+      if (Number.isFinite(score)) groups[subject] = [...(groups[subject] || []), score];
+      return groups;
+    }, {});
+    const subjects = Object.entries(grouped)
+      .map(([subject, scores]) => ({
+        subject,
+        average: scores.reduce((sum, score) => sum + score, 0) / scores.length,
+      }))
+      .sort((a, b) => b.average - a.average);
+    return {
+      subjects,
+      average: subjects.length
+        ? subjects.reduce((sum, item) => sum + item.average, 0) / subjects.length
+        : 0,
+    };
+  }, [myResults]);
   const [tokens, setTokens] = useState({});
   const [activeExam, setActiveExam] = useState(null);
+  const [activeAttempt, setActiveAttempt] = useState(1);
 
   const [soalData, setSoalData] = useState([]);
   const [loadingSoal, setLoadingSoal] = useState(false);
@@ -226,6 +254,7 @@ const SiswaDashboard = () => {
   });
 
   const [isAcakSoalActive, setIsAcakSoalActive] = useState(true);
+  const [isExamTimerActive, setIsExamTimerActive] = useState(true);
   const [isLocked, setIsLocked] = useState(false);
   const [pelanggaran, setPelanggaran] = useState(0);
   const [isAntiCheatActive, setIsAntiCheatActive] = useState(true);
@@ -318,6 +347,24 @@ const SiswaDashboard = () => {
     if (timeLeft > 0) timeLeftRef.current = timeLeft;
   }, [timeLeft]);
   useEffect(() => {
+    const exam = activeExamRef.current;
+    const username = getVal(user, "Username");
+    const examId = exam ? getVal(exam, "ID") : "";
+    if (!exam || !username || !examId || isSubmittingRef.current) return;
+
+    localStorage.setItem(
+      `status_ujian_${username}_${examId}`,
+      JSON.stringify({
+        answers,
+        sisaWaktu: timeLeft,
+        pelanggaran,
+        isLocked,
+        attempt: activeAttempt,
+        updatedAt: new Date().toISOString(),
+      }),
+    );
+  }, [activeExam, activeAttempt, answers, timeLeft, pelanggaran, isLocked, user]);
+  useEffect(() => {
     if (soalData && soalData.length > 0) {
       soalData.forEach((soal) => {
         const urlGambar = getVal(soal, "Link_Gambar");
@@ -362,8 +409,20 @@ const SiswaDashboard = () => {
           `tadbira_siswa_nilai_${getVal(user, "Username")}`,
         );
 
-        if (cachedJadwal) setExams(JSON.parse(cachedJadwal));
-        if (cachedNilai) setMyResults(JSON.parse(cachedNilai));
+        try {
+          if (cachedJadwal) setExams(JSON.parse(cachedJadwal));
+        } catch (error) {
+          localStorage.removeItem("tadbira_siswa_jadwal");
+          console.warn("Cache jadwal siswa rusak dan telah dibersihkan.");
+        }
+        try {
+          if (cachedNilai) setMyResults(JSON.parse(cachedNilai));
+        } catch (error) {
+          localStorage.removeItem(
+            `tadbira_siswa_nilai_${getVal(user, "Username")}`,
+          );
+          console.warn("Cache nilai siswa rusak dan telah dibersihkan.");
+        }
 
         // Langsung matikan loading agar jadwal dan nilai instan muncul di HP!
         setLoading(false);
@@ -376,22 +435,11 @@ const SiswaDashboard = () => {
         try {
           const settingsRes = await api.read("Settings");
           if (settingsRes && Array.isArray(settingsRes)) {
-            const acSetting = settingsRes.find(
-              (s) => String(s.kunci).toUpperCase() === "MODE_UJIAN",
-            );
-            setIsAntiCheatActive(
-              acSetting
-                ? String(acSetting.nilai).toUpperCase() !== "OFF"
-                : true,
-            );
+            const acSetting = findSetting(settingsRes, "MODE_UJIAN");
+            setIsAntiCheatActive(isSettingEnabled(acSetting?.nilai, true));
 
-            const appOnlySetting = settingsRes.find(
-              (s) => String(s.kunci).toUpperCase() === "MODE_APLIKASI",
-            );
-            if (
-              appOnlySetting &&
-              String(appOnlySetting.nilai).toUpperCase() === "ON"
-            ) {
+            const appOnlySetting = findSetting(settingsRes, "MODE_APLIKASI");
+            if (isSettingEnabled(appOnlySetting?.nilai, false)) {
               if (!isWebView()) setIsAppBlocked(true);
               else setIsAppBlocked(false);
             } else {
@@ -407,14 +455,10 @@ const SiswaDashboard = () => {
               });
             }
 
-            const acakSetting = settingsRes.find(
-              (s) => String(s.kunci).toUpperCase() === "ACAK_SOAL",
-            );
-            setIsAcakSoalActive(
-              acakSetting
-                ? String(acakSetting.nilai).toUpperCase() !== "OFF"
-                : true,
-            );
+            const acakSetting = findSetting(settingsRes, "ACAK_SOAL");
+            setIsAcakSoalActive(isSettingEnabled(acakSetting?.nilai, true));
+            const timerSetting = findSetting(settingsRes, "TIMER_UJIAN");
+            setIsExamTimerActive(isSettingEnabled(timerSetting?.nilai, true));
           }
         } catch (setErr) {
           console.warn("Gagal menarik konfigurasi pengaturan admin:", setErr);
@@ -427,14 +471,7 @@ const SiswaDashboard = () => {
         const finalNilai = await api.getNilaiSiswa(userName);
 
         // --- TAMBAHAN BARU: AMBIL NILAI ANTREAN LOKAL YANG BELUM SEMPAT TERKIRIM ---
-        const queueStr = localStorage.getItem("tadbira_offline_nilai");
-        let pendingNilai = [];
-        if (queueStr) {
-          const syncQueue = JSON.parse(queueStr);
-          pendingNilai = syncQueue.filter(
-            (q) => q.username === getVal(user, "Username"),
-          );
-        }
+        const pendingNilai = readOfflineQueue(getVal(user, "Username"));
 
         // Gabungkan nilai dari server dengan nilai yang masih pending di HP
         const gabunganNilai = [...pendingNilai, ...(finalNilai || [])];
@@ -653,6 +690,9 @@ const SiswaDashboard = () => {
     // KODE BARU: Pelacak Zoom & Resize Layar
     let resizeTimeout;
     let isZoomingOrResizing = false;
+    let focusLossTimeout;
+    let visibilityTimeout;
+    const shortInterruptionGraceMs = 1500;
 
     const handleResize = () => {
       isZoomingOrResizing = true;
@@ -665,13 +705,28 @@ const SiswaDashboard = () => {
 
     const handleVisibilityChange = () => {
       if (zoomedImgRef.current) return;
-      if (document.hidden) triggerLock("Tab Disembunyikan / Pindah Tab");
+      clearTimeout(visibilityTimeout);
+      if (document.hidden) {
+        visibilityTimeout = setTimeout(() => {
+          if (document.hidden) triggerLock("Tab Disembunyikan / Pindah Tab");
+        }, shortInterruptionGraceMs);
+      }
     };
 
     const handleBlur = () => {
       if (zoomedImgRef.current) return;
       if (isZoomingOrResizing) return; // KODE BARU: Abaikan hilang fokus jika sedang nge-zoom
-      triggerLock("Layar Hilang Fokus / Klik Overlay Luar");
+      clearTimeout(focusLossTimeout);
+      focusLossTimeout = setTimeout(() => {
+        if (!document.hasFocus() && !document.hidden) {
+          triggerLock("Layar Hilang Fokus / Klik Overlay Luar");
+        }
+      }, shortInterruptionGraceMs);
+    };
+
+    const handleFocus = () => {
+      clearTimeout(focusLossTimeout);
+      clearTimeout(visibilityTimeout);
     };
 
     const handleFullscreenChange = () => {
@@ -681,6 +736,7 @@ const SiswaDashboard = () => {
         !document.msFullscreenElement
       ) {
         console.log("Siswa keluar dari mode Fullscreen");
+        triggerLock("Keluar dari Mode Fullscreen");
       }
     };
 
@@ -705,6 +761,7 @@ const SiswaDashboard = () => {
     window.addEventListener("resize", handleResize);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("blur", handleBlur);
+    window.addEventListener("focus", handleFocus);
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
     document.addEventListener("msfullscreenchange", handleFullscreenChange);
@@ -716,6 +773,9 @@ const SiswaDashboard = () => {
       clearTimeout(resizeTimeout);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("focus", handleFocus);
+      clearTimeout(focusLossTimeout);
+      clearTimeout(visibilityTimeout);
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
       document.removeEventListener(
         "webkitfullscreenchange",
@@ -735,79 +795,19 @@ const SiswaDashboard = () => {
     // Sengaja dikosongkan agar menghemat kuota egress data server & HP siswa
   }, []);
 
-  // Pasang pemantau sinyal internet HP + MESIN AUTO-SYNC HEMAT EGRESS SERVER
+  // Pasang pemantau sinyal internet HP.
+  // Sinkronisasi antrean ditangani oleh mesin global di App.jsx agar tidak terjadi
+  // dua insert bersamaan ketika halaman hasil ujian baru saja dibuka.
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
 
-    const prosesSyncKeServer = async () => {
-      // HEMAT EGRESS: Jika tidak ada sinyal internet, segera matikan fungsi untuk cegah tembakan API sia-sia
-      if (!navigator.onLine) return;
-
-      const offlineRaw = localStorage.getItem("tadbira_offline_nilai");
-      if (!offlineRaw) return;
-
-      let offlineData = [];
-      try {
-        const parsed = JSON.parse(offlineRaw);
-        // Konversi paksa ke array agar mesin kurir tetap mau mengirim data lama
-        offlineData = Array.isArray(parsed) ? parsed : [parsed];
-      } catch (e) {
-        return;
-      }
-
-      if (offlineData.length === 0) return;
-
-      const dataTerkirim = [];
-
-      for (const payload of offlineData) {
-        try {
-          // 1. Tembak Nilai langsung ke Database TADBIRA
-          const { error: errNilai } = await supabase
-            .from("nilai")
-            .insert([payload]);
-          if (errNilai && errNilai.code !== "23505") throw errNilai; // Abaikan error duplikat (code 23505)
-
-          // 2. Hapus Sesi Ujian agar notifikasi GuruDashboard berubah jadi Selesai
-          await api.deleteSesi(payload.username, payload.id_ujian);
-
-          dataTerkirim.push(payload.id_ujian);
-        } catch (error) {
-          console.warn("Koneksi tidak stabil, menunggu sinyal kembali...");
-        }
-      }
-
-      // 3. Bersihkan memori HP dari data yang SUDAH terkirim saja
-      if (dataTerkirim.length > 0) {
-        const sisaData = offlineData.filter(
-          (d) => !dataTerkirim.includes(d.id_ujian),
-        );
-        if (sisaData.length === 0) {
-          localStorage.removeItem("tadbira_offline_nilai");
-        } else {
-          localStorage.setItem(
-            "tadbira_offline_nilai",
-            JSON.stringify(sisaData),
-          );
-        }
-      }
-    };
-
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
-
-    // Mesin Murni Event-Driven (Tanpa Polling Interval Berulang)
-    window.addEventListener("online", prosesSyncKeServer);
-    window.addEventListener("force-sync", prosesSyncKeServer);
-
-    // Cek satu kali saat pertama buka halaman dashboard
-    prosesSyncKeServer();
 
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
-      window.removeEventListener("online", prosesSyncKeServer);
-      window.removeEventListener("force-sync", prosesSyncKeServer);
     };
   }, []);
 
@@ -834,19 +834,47 @@ const SiswaDashboard = () => {
         "Akses DITOLAK. Silakan periksa kembali token ujian Anda.",
       );
 
-    const sudahMengerjakan = myResults.some(
+    const examResults = myResults.filter(
       (res) =>
-        String(getVal(res, "Mapel")).toUpperCase() ===
-        String(examMapel).toUpperCase(),
+        String(getVal(res, "ID_Ujian") || getVal(res, "id_ujian")) ===
+        String(examId),
     );
-    if (sudahMengerjakan)
+    const completedAttempts = examResults.filter(
+      (res) =>
+        !String(getVal(res, "Status"))
+          .toUpperCase()
+          .includes("DIBUKA_ULANG"),
+    );
+    const recordedAttempts = examResults
+      .map((result) => {
+        const submissionId = String(
+          getVal(result, "submission_id") || "",
+        );
+        const match = submissionId.match(/:(\d+)$/);
+        return match ? Number(match[1]) : 0;
+      })
+      .filter((attempt) => Number.isFinite(attempt));
+    const attemptNumber =
+      Math.max(completedAttempts.length, ...recordedAttempts, 0) + 1;
+    const latestResult = examResults[examResults.length - 1];
+    if (completedAttempts.length >= 3)
       return showAlert(
         "danger",
-        "Akses Dibatasi",
-        "Anda sudah menyelesaikan ujian ini. Nilai Anda sudah terekam di sistem.",
+        "Kesempatan Habis",
+        "Anda sudah menggunakan 3 kesempatan untuk ujian ini.",
+      );
+    if (
+      latestResult &&
+      String(getVal(latestResult, "Status")).toUpperCase().includes("DIS")
+    )
+      return showAlert(
+        "danger",
+        "Ujian Didiskualifikasi",
+        "Guru harus membuka kembali kesempatan ini sebelum ujian dapat dilanjutkan.",
       );
 
     setActiveExam(exam);
+    setActiveAttempt(attemptNumber);
     setLoadingSoal(true);
     setIsMobileDrawerOpen(false);
     setRaguRagu({});
@@ -869,7 +897,21 @@ const SiswaDashboard = () => {
     }
 
     try {
-      const allSoal = await api.getSoalUjian(examMapel);
+      const soalCacheKey = `soal_ujian_${String(examMapel).trim().toUpperCase()}`;
+      let allSoal;
+      try {
+        allSoal = await api.getSoalUjian(examMapel);
+        localStorage.setItem(soalCacheKey, JSON.stringify(allSoal));
+      } catch (error) {
+        const cachedSoal = localStorage.getItem(soalCacheKey);
+        if (!cachedSoal) throw error;
+        try {
+          allSoal = JSON.parse(cachedSoal);
+        } catch (cacheError) {
+          localStorage.removeItem(soalCacheKey);
+          throw error;
+        }
+      }
       const examMapelUpper = String(examMapel).toUpperCase();
       const filterSoal = allSoal.filter((s) => {
         const soalMapel = String(getVal(s, "Mapel")).toUpperCase();
@@ -929,6 +971,16 @@ const SiswaDashboard = () => {
       }
 
       if (serverSession) {
+        if (serverSession.status === "DISQUALIFIED") {
+          showAlert(
+            "danger",
+            "Ujian Didiskualifikasi",
+            "Sesi ujian ini sudah didiskualifikasi dan tidak dapat dilanjutkan.",
+          );
+          setActiveExam(null);
+          return;
+        }
+
         let parsedJawaban = {};
         try {
           parsedJawaban =
@@ -952,6 +1004,29 @@ const SiswaDashboard = () => {
         finalTimeLeft = serverSession.sisa_waktu || examDurasi * 60;
         setPelanggaran(serverSession.pelanggaran || 0);
         setIsLocked(serverSession.status === "LOCKED");
+
+        if (localSavedAnswersStr) {
+          try {
+            const localSnapshot = JSON.parse(
+              localStorage.getItem(
+                `status_ujian_${getVal(user, "Username")}_${examId}`,
+              ) || "{}",
+            );
+            const localIsNewer =
+              localSnapshot.updatedAt &&
+              (!serverSession.updated_at ||
+                new Date(localSnapshot.updatedAt).getTime() >
+                  new Date(serverSession.updated_at).getTime());
+            if (localIsNewer) {
+              if (localSnapshot.answers) finalAnswers = localSnapshot.answers;
+              if (Number.isFinite(Number(localSnapshot.sisaWaktu))) {
+                finalTimeLeft = Math.max(0, Number(localSnapshot.sisaWaktu));
+              }
+            }
+          } catch (error) {
+            console.warn("Gagal membandingkan snapshot sesi lokal:", error);
+          }
+        }
       } else {
         // =============================================================
         // KODE BARU: JIKA OFFLINE, BACA STATUS KUNCI DARI BRANKAS HP
@@ -964,9 +1039,20 @@ const SiswaDashboard = () => {
         );
 
         if (statusOffline) {
-          const parsedStatus = JSON.parse(statusOffline);
+          let parsedStatus = {};
+          try {
+            parsedStatus = JSON.parse(statusOffline) || {};
+          } catch (error) {
+            console.warn("Gagal membaca snapshot sesi offline:", error);
+          }
           setPelanggaran(parsedStatus.pelanggaran || 0);
           setIsLocked(parsedStatus.isLocked || false);
+          if (parsedStatus.answers && Object.keys(finalAnswers).length === 0) {
+            finalAnswers = parsedStatus.answers;
+          }
+          if (Number.isFinite(Number(parsedStatus.sisaWaktu))) {
+            finalTimeLeft = Math.max(0, Number(parsedStatus.sisaWaktu));
+          }
 
           // Sinkronkan Ref agar mesin Anti-Cheat tidak bingung
           pelanggaranRef.current = parsedStatus.pelanggaran || 0;
@@ -1054,17 +1140,18 @@ const SiswaDashboard = () => {
 
     try {
       // Bikin ID unik untuk baris database Supabase
-      const amanId = Number(
-        Date.now().toString() +
-          Math.floor(Math.random() * 100)
-            .toString()
-            .padStart(2, "0"),
+      const username = getVal(user, "Username");
+      const examId = getVal(activeExamRef.current, "ID");
+      const amanId = createStableSubmissionId(
+        username,
+        `${examId}:${activeAttempt}`,
       );
 
       const dataNilai = {
         id: amanId,
-        username: getVal(user, "Username"), // <--- WAJIB DITAMBAHKAN
-        id_ujian: getVal(activeExamRef.current, "ID"), // <--- WAJIB DITAMBAHKAN
+        submission_id: `${username}:${examId}:${activeAttempt}`,
+        username,
+        id_ujian: examId,
         nama_siswa: getVal(user, "Nama"),
         kelas: getVal(user, "Kelas"),
         mapel: getVal(activeExamRef.current, "Mapel"),
@@ -1082,29 +1169,21 @@ const SiswaDashboard = () => {
       // 2. BERSIHKAN JAWABAN DARI MEMORI INTERNAL HP SISWA
       const idUjian = getVal(activeExamRef.current, "ID");
       localStorage.removeItem(`jawaban_${getVal(user, "Username")}_${idUjian}`);
-      // 3. MASUKKAN KE ANTREAN SINKRONISASI LOKAL HP SISWA (Format Array Anti-Stuck)
-      const currentOfflineRaw = localStorage.getItem("tadbira_offline_nilai");
-      let currentOfflineArray = [];
-
-      try {
-        if (currentOfflineRaw) {
-          const parsed = JSON.parse(currentOfflineRaw);
-          // Pastikan data lama otomatis dikonversi ke array jika strukturnya salah
-          currentOfflineArray = Array.isArray(parsed) ? parsed : [parsed];
-        }
-      } catch (e) {
-        currentOfflineArray = [];
-      }
-
-      // Masukkan data baru hanya jika ID ujian belum ada di antrean
-      if (!currentOfflineArray.some((d) => d.id_ujian === dataNilai.id_ujian)) {
-        currentOfflineArray.push(dataNilai);
-      }
-
-      localStorage.setItem(
-        "tadbira_offline_nilai",
-        JSON.stringify(currentOfflineArray),
+      localStorage.removeItem(
+        `status_ujian_${getVal(user, "Username")}_${idUjian}`,
       );
+      // 3. MASUKKAN KE ANTREAN SINKRONISASI LOKAL HP SISWA (Format Array Anti-Stuck)
+      if (navigator.onLine) {
+        try {
+          await api.submitNilai(dataNilai);
+          await api.deleteSesi(username, examId);
+        } catch (error) {
+          console.warn("Nilai belum tersinkron, masuk antrean offline:", error);
+          enqueueOfflineSubmission(username, dataNilai);
+        }
+      } else {
+        enqueueOfflineSubmission(username, dataNilai);
+      }
 
       // 4. RESET STATE INTERFACE UJIAN & PINDAH KE TAB NILAI
       // setIsSubmitting(false);
@@ -1184,6 +1263,53 @@ const SiswaDashboard = () => {
     }
   };
 
+  const handleEmergencyUnlock = async (pin) => {
+    if (pin !== "123456" || !activeExamRef.current) return;
+
+    setIsLocked(false);
+    isLockedRef.current = false;
+
+    const usernameSiswa = getVal(user, "Username");
+    const examId = getVal(activeExamRef.current, "ID");
+    localStorage.setItem(
+      `status_ujian_${usernameSiswa}_${examId}`,
+      JSON.stringify({
+        pelanggaran: pelanggaranRef.current,
+        isLocked: false,
+      }),
+    );
+
+    if (navigator.onLine) {
+      try {
+        await api.updateSesiStatus(
+          usernameSiswa,
+          examId,
+          "ACTIVE",
+          pelanggaranRef.current,
+        );
+      } catch (error) {
+        console.error("Gagal menyinkronkan pembukaan kunci PIN:", error);
+        showAlert(
+          "warning",
+          "Sinkronisasi Tertunda",
+          "Kunci terbuka di perangkat, tetapi status server belum tersinkron. Jangan tutup halaman sampai koneksi pulih.",
+        );
+      }
+    }
+
+    try {
+      const docElm = document.documentElement;
+      if (docElm.requestFullscreen)
+        docElm.requestFullscreen().catch(() => {});
+    } catch (err) {}
+
+    showAlert(
+      "success",
+      "Kunci Dibuka Darurat",
+      "Pengawas telah membuka kunci ujian secara manual. Lanjutkan ujian Anda!",
+    );
+  };
+
   const toggleRaguRagu = () => {
     const currentSoal = soalData[currentSoalIndex];
     if (!currentSoal) return;
@@ -1226,6 +1352,8 @@ const SiswaDashboard = () => {
           <ExamTimer
             initialTime={timeLeft}
             timeRef={timeLeftRef}
+            onTimeChange={setTimeLeft}
+            enabled={isExamTimerActive}
             onTick={(newTime) => {
               if (activeExamRef.current && navigator.onLine) {
                 api.saveSesi(
@@ -1249,8 +1377,8 @@ const SiswaDashboard = () => {
         <p className="text-center text-slate-300 max-w-lg text-sm md:text-base leading-relaxed mb-8">
           Sistem mendeteksi Anda{" "}
           <strong>keluar dari aplikasi / berpindah layar</strong>. Ini adalah
-          pelanggaran pertama. Silakan panggil pengawas untuk membuka kunci agar
-          Anda bisa melanjutkan ujian.
+          pelanggaran ke-{pelanggaranRef.current}. Silakan panggil pengawas
+          untuk membuka kunci agar Anda bisa melanjutkan ujian.
           <br />
           <br />
           <strong className="text-amber-400 font-black tracking-widest text-xs uppercase animate-pulse block mb-4">
@@ -1278,34 +1406,7 @@ const SiswaDashboard = () => {
             className="w-full text-center bg-slate-800 border border-slate-600 text-white font-black tracking-[0.5em] p-3 rounded-xl focus:outline-none focus:border-emerald-500 placeholder:tracking-normal placeholder:font-medium placeholder:text-slate-600"
             onChange={(e) => {
               if (e.target.value === "123456") {
-                // Hanya membuka kuncinya saja, JANGAN me-reset angka pelanggarannya.
-                // Angka pelanggaran tetap utuh sesuai yang ada di sistem saat ini (misal: tetap 2).
-                setIsLocked(false);
-                isLockedRef.current = false;
-
-                // --- KODE BARU: UPDATE BRANKAS HP AGAR TIDAK TERKUNCI LAGI SAAT REFRESH ---
-                const usernameSiswa = getVal(user, "Username");
-                const examId = getVal(activeExamRef.current, "ID");
-                localStorage.setItem(
-                  `status_ujian_${usernameSiswa}_${examId}`,
-                  JSON.stringify({
-                    pelanggaran: pelanggaranRef.current, // Pelanggaran tetap, tidak jadi 0
-                    isLocked: false, // Layar resmi dibuka
-                  }),
-                );
-                // --------------------------------------------------------------------------
-
-                try {
-                  const docElm = document.documentElement;
-                  if (docElm.requestFullscreen)
-                    docElm.requestFullscreen().catch(() => {});
-                } catch (err) {}
-
-                showAlert(
-                  "success",
-                  "Kunci Dibuka Darurat",
-                  "Pengawas telah membuka kunci ujian secara manual. Lanjutkan ujian Anda!",
-                );
+                handleEmergencyUnlock(e.target.value);
               }
             }}
           />
@@ -1455,6 +1556,8 @@ const SiswaDashboard = () => {
             <ExamTimer
               initialTime={timeLeft}
               timeRef={timeLeftRef}
+              onTimeChange={setTimeLeft}
+              enabled={isExamTimerActive}
               onTick={(newTime) => {
                 // TAMBAHAN: Cek !isSubmittingRef.current agar timer berhenti nge-save saat dikumpulkan
                 if (activeExamRef.current && !isSubmittingRef.current) {
@@ -1495,14 +1598,20 @@ const SiswaDashboard = () => {
 
         <main className="flex-1 w-full max-w-7xl mx-auto p-2 md:p-5 flex flex-col justify-center z-10 relative pb-24 lg:pb-5">
           {loadingSoal ? (
-            <div className="flex flex-col items-center justify-center h-full m-auto">
-              <RefreshCw
-                className="animate-spin text-emerald-500 mb-4"
-                size={48}
-              />
-              <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter">
-                Menyiapkan Naskah Soal...
-              </h2>
+            <div className="w-full max-w-5xl m-auto rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="mb-6 flex items-center justify-between gap-4">
+                <div className="space-y-3">
+                  <div className="h-8 w-32 animate-pulse rounded-lg bg-slate-200" />
+                  <div className="h-4 w-56 animate-pulse rounded-lg bg-slate-200" />
+                </div>
+                <div className="h-10 w-24 animate-pulse rounded-lg bg-slate-200" />
+              </div>
+              <div className="space-y-4">
+                <div className="h-28 w-full animate-pulse rounded-2xl bg-slate-200" />
+                <div className="h-16 w-11/12 animate-pulse rounded-xl bg-slate-200" />
+                <div className="h-16 w-10/12 animate-pulse rounded-xl bg-slate-200" />
+                <div className="h-16 w-9/12 animate-pulse rounded-xl bg-slate-200" />
+              </div>
             </div>
           ) : (
             <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 w-full h-[calc(100vh-140px)] lg:h-[calc(100vh-120px)] min-h-[500px]">
@@ -2110,14 +2219,8 @@ const SiswaDashboard = () => {
               Ujian Tersedia
             </h3>
             {loading ? (
-              <div className="py-16 text-center bg-white rounded-[2rem] border border-slate-100 shadow-sm">
-                <RefreshCw
-                  className="animate-spin mx-auto text-emerald-500 mb-3"
-                  size={28}
-                />
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-                  Mencari Jadwal...
-                </p>
+              <div className="rounded-[2rem] border border-slate-100 bg-white shadow-sm">
+                <TableSkeleton rows={4} columns={1} />
               </div>
             ) : errorMsg ? (
               <div className="p-6 text-center bg-red-50 rounded-[2rem] border border-red-100 text-red-600 font-bold shadow-sm text-sm">
@@ -2216,15 +2319,9 @@ const SiswaDashboard = () => {
           {loading ? (
             <motion.div
               variants={fadeUp}
-              className="py-16 text-center bg-white rounded-[2rem] shadow-sm border border-slate-100"
+              className="rounded-[2rem] bg-white shadow-sm border border-slate-100"
             >
-              <RefreshCw
-                className="animate-spin mx-auto text-emerald-500 mb-3"
-                size={28}
-              />
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-                Menarik Data Nilai...
-              </p>
+              <TableSkeleton rows={4} columns={3} />
             </motion.div>
           ) : myResults.length === 0 ? (
             <motion.div
@@ -2240,9 +2337,15 @@ const SiswaDashboard = () => {
               </p>
             </motion.div>
           ) : (
+            <>
+            <Card className="mb-4 grid grid-cols-1 gap-3 rounded-[1.5rem] border border-emerald-100 bg-emerald-50 p-4 sm:grid-cols-3">
+              <div><p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Rata-rata</p><p className="text-2xl font-black text-emerald-800">{scoreInsights.average.toFixed(1)}</p></div>
+              <div><p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Mapel terkuat</p><p className="truncate text-lg font-black text-emerald-800">{scoreInsights.subjects[0]?.subject || "-"}</p></div>
+              <div><p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Jumlah ujian</p><p className="text-2xl font-black text-emerald-800">{myResults.length}</p></div>
+            </Card>
             <motion.div
               variants={fadeUp}
-              className="grid grid-cols-1 md:grid-cols-2 gap-4"
+              className="grid grid-cols-1 gap-4 md:grid-cols-2"
             >
               {myResults.map((res, idx) => {
                 const mapel = getVal(res, "Mapel") || "Ujian";
@@ -2303,6 +2406,7 @@ const SiswaDashboard = () => {
                 );
               })}
             </motion.div>
+            </>
           )}
         </motion.div>
       )}

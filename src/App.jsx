@@ -3,13 +3,57 @@ import React, { useContext, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, AuthContext } from "./context/AuthContext";
 import { api, supabase } from "./api/api";
+import { PageSkeleton } from "./components/ui/Ui";
+import {
+  readOfflineQueue,
+  writeOfflineQueue,
+  removeLegacyOfflineQueue,
+} from "./utils/offlineQueue";
+
+class AppErrorBoundary extends React.Component {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error) {
+    console.error("Aplikasi mengalami error rendering:", error);
+  }
+
+  handleRetry = () => {
+    this.setState({ hasError: false });
+  };
+
+  render() {
+    if (!this.state.hasError) return this.props.children;
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100 p-6">
+        <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-xl border border-slate-200">
+          <h1 className="text-xl font-black text-slate-800">Halaman mengalami kendala</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Muat ulang tampilan untuk melanjutkan. Data ujian yang tersimpan lokal tetap aman.
+          </p>
+          <button
+            type="button"
+            onClick={this.handleRetry}
+            className="mt-6 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-700"
+          >
+            Coba lagi
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
 
 // Import halaman-halaman yang sudah kita pisahkan
 import LoginPage from "./pages/LoginPage";
-import AdminDashboard from "./pages/AdminDashboard";
-import GuruDashboard from "./pages/GuruDashboard";
-import SiswaDashboard from "./pages/SiswaDashboard";
-import UjianDashboard from "./pages/UjianDashboard";
+const AdminRoutes = React.lazy(() => import("./features/admin/AdminRoutes"));
+const GuruDashboard = React.lazy(() => import("./components/layout/GuruDashboardWrapper"));
+const SiswaDashboard = React.lazy(() => import("./components/layout/SiswaDashboardWrapper"));
+const UjianDashboard = React.lazy(() => import("./pages/UjianDashboard"));
 
 // --- KOMPONEN PELINDUNG RUTE (PROTECTED ROUTE) ---
 // Memastikan hanya role tertentu yang bisa masuk ke sebuah halaman
@@ -34,50 +78,86 @@ const AppRouter = () => {
   // MESIN OTOMATIS: GLOBAL BACKGROUND SYNC (ANTI-CRASH & AUTOMATIC CLEANUP)
   // =================================================================================
   useEffect(() => {
+    let syncInProgress = false;
+    let lastStaleSessionCleanup = 0;
+
     const runBackgroundSync = async () => {
       // Jika tidak ada internet atau belum login, tunda dulu
-      if (!navigator.onLine || !user) return;
+      if (!navigator.onLine || !user || syncInProgress) return;
+      syncInProgress = true;
 
       try {
-        const offlineData = localStorage.getItem("tadbira_offline_nilai");
-        if (!offlineData) return;
+        if (Date.now() - lastStaleSessionCleanup >= 5 * 60 * 1000) {
+          await api.cleanupStaleSesi();
+          lastStaleSessionCleanup = Date.now();
+        }
+        const username = user.Username || user.username;
+        const queueData = readOfflineQueue(username);
+        if (queueData.length === 0) return;
+        const remainingData = [];
 
-        const dataNilai = JSON.parse(offlineData);
-        
-        // Pastikan data yang tersimpan valid dan punya identitas
-        if (dataNilai && dataNilai.username && dataNilai.id_ujian) {
-          console.log("Menemukan data offline TADBIRA, mencoba sinkronisasi...");
+        for (let index = 0; index < queueData.length; index += 1) {
+        const dataNilai = queueData[index];
+        if (!dataNilai || !(dataNilai.username || dataNilai.nama_siswa)) {
+          remainingData.push(dataNilai);
+          continue;
+        }
 
-          // 1. Masukkan nilai siswa ke tabel 'nilai'
-          const { error: errorNilai } = await supabase
-            .from("nilai")
-            .insert([dataNilai]);
+        const serverPayload = {
+          id: Number(dataNilai.id) || Date.now(),
+          submission_id: dataNilai.submission_id || undefined,
+          username: dataNilai.username || "",
+          id_ujian: dataNilai.id_ujian || "",
+          nama_siswa: dataNilai.nama_siswa || "",
+          kelas: dataNilai.kelas || "",
+          mapel: dataNilai.mapel || "",
+          skor: Number(dataNilai.skor ?? 0),
+          benar: Number(dataNilai.benar ?? 0),
+          salah: Number(dataNilai.salah ?? 0),
+          total_soal: Number(dataNilai.total_soal ?? 0),
+          status: dataNilai.status || "Selesai",
+          detail_jawaban:
+            typeof dataNilai.detail_jawaban === "string"
+              ? dataNilai.detail_jawaban
+              : JSON.stringify(dataNilai.detail_jawaban || []),
+        };
 
-          // Jika berhasil masuk, atau ternyata data sudah terlanjur masuk (error duplicate 23505)
-          if (!errorNilai || errorNilai.code === "23505") {
-            
-            // 2. BERSIHKAN RUMAH: Hapus sesi ujian agar di GuruDashboard statusnya berubah jadi SELESAI
-            await supabase
+        console.log("Menemukan data offline TADBIRA, mencoba sinkronisasi...");
+
+        const { error: errorNilai } = await supabase
+          .from("nilai")
+          .insert([serverPayload]);
+
+        if (!errorNilai || errorNilai.code === "23505") {
+          if (dataNilai.username && dataNilai.id_ujian) {
+            const { error: errorSesi } = await supabase
               .from("sesi_ujian")
               .delete()
               .eq("id_sesi", `${dataNilai.username}_${dataNilai.id_ujian}`);
-
-            // 3. Hapus antrean di HP siswa agar tidak dikirim berulang
-            localStorage.removeItem("tadbira_offline_nilai");
-            console.log("Sinkronisasi sukses! Data offline berhasil dibersihkan.");
-          } else {
-            console.error("Supabase menolak data offline:", errorNilai.message);
-            // Jika ditolak karena error data fatal, hapus antrean agar tidak bikin macet selamanya
-            if (errorNilai.code.startsWith("22") || errorNilai.code.startsWith("23")) {
-              localStorage.removeItem("tadbira_offline_nilai");
+            if (errorSesi) {
+              throw new Error(
+                `Nilai tersimpan, tetapi sesi belum terhapus: ${errorSesi.message}`,
+              );
             }
           }
         } else {
-          localStorage.removeItem("tadbira_offline_nilai");
+          console.error("Supabase menolak data offline:", errorNilai.message);
+          remainingData.push(dataNilai, ...queueData.slice(index + 1));
+          break;
+        }
+        }
+
+        if (remainingData.length > 0) {
+        writeOfflineQueue(username, remainingData);
+        } else {
+        writeOfflineQueue(username, []);
+        removeLegacyOfflineQueue(username);
+        console.log("Sinkronisasi sukses! Data offline berhasil dibersihkan.");
         }
       } catch (err) {
         console.error("Mesin sync offline mengalami crash internal:", err);
-        localStorage.removeItem("tadbira_offline_nilai");
+      } finally {
+        syncInProgress = false;
       }
     };
 
@@ -93,37 +173,34 @@ const AppRouter = () => {
     };
   }, [user]);
 
-  // Jika belum login, kunci semua akses HANYA ke halaman Login
   if (!user) {
     return (
-      <BrowserRouter>
-        <Routes>
-          <Route path="*" element={<LoginPage />} />
-        </Routes>
-      </BrowserRouter>
+      <Routes>
+        <Route path="*" element={<LoginPage />} />
+      </Routes>
     );
   }
 
-  // Jika sudah login, atur jalur halaman menggunakan sistem React Router
   return (
-    <BrowserRouter>
+    <React.Suspense fallback={<PageSkeleton label="Menyiapkan halaman" />}>
       <Routes>
-        {/* Rute Utama (Dashboard Default) berdasarkan role */}
         <Route
-          path="/"
+          path="/*"
           element={
             user.role === "admin" ? (
-              <AdminDashboard />
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminRoutes />
+              </ProtectedRoute>
             ) : user.role === "guru" ? (
               <GuruDashboard />
-            ) : (
+            ) : user.role === "siswa" ? (
               <SiswaDashboard />
+            ) : (
+              <Navigate to="/" replace />
             )
           }
         />
 
-        {/* PINTU RAHASIA: Rute Khusus UjianDashboard */}
-        {/* Dilindungi oleh ProtectedRoute, hanya Admin & Guru yang bisa lewat */}
         <Route
           path="/ujian-dashboard"
           element={
@@ -133,67 +210,129 @@ const AppRouter = () => {
           }
         />
 
-        {/* Fallback: Jika user iseng mengetik URL ngawur, kembalikan ke dashboard */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
+    </React.Suspense>
   );
 };
 
 export default function App() {
   return (
     <AuthProvider>
-      <AppRouter />
+      <BrowserRouter>
+        <AppErrorBoundary>
+          <AppRouter />
+        </AppErrorBoundary>
+      </BrowserRouter>
 
       {/* Global Styles & Font */}
       <style>{`
-        /* 1. IMPORT NOTO SANS DARI GOOGLE FONTS (Khusus Teks Latin/Standar) */
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
-        
-        /* 2. DAFTARKAN FONT ISEP MISBAH LOKAL */
+
+        :root {
+          --app-bg: #edf5ff;
+          --panel: #ffffff;
+          --panel-soft: #f8fbff;
+          --panel-muted: #f3f7ff;
+          --border: #dfeafc;
+          --text-strong: #0f172a;
+          --text: #1e293b;
+          --text-soft: #475569;
+          --primary: #0f766e;
+          --primary-soft: #dff6eb;
+          --secondary: #2563eb;
+          --secondary-soft: #dbeafe;
+          --warning: #b45309;
+          --danger: #b91c1c;
+          --success: #047857;
+        }
+
         @font-face {
           font-family: 'IsepMisbah';
           src: url('/fonts/IsepMisbah.ttf') format('truetype');
           unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
           font-display: swap;
-          
-          /* SESUAIKAN UKURAN ARAB: 115% biasanya paling pas saat bersanding dengan Noto Sans */
-          size-adjust: 120%; 
+          size-adjust: 120%;
         }
 
-        /* 3. PAKSA SEMUA ELEMEN TUNDUK PADA ATURAN FONT INI (Prioritaskan Arab, lalu Latin) */
-        * { 
-          font-family: 'IsepMisbah', 'Noto Sans', sans-serif !important; 
+        * {
+          font-family: 'IsepMisbah', 'Noto Sans', sans-serif !important;
         }
 
-        /* 4. PENGATURAN DASAR UNTUK SELURUH TEKS (Teks Standar) */
+        html {
+          background: var(--app-bg);
+        }
+
         body {
-          color: #333333; 
+          margin: 0;
+          background: linear-gradient(180deg, #edf5ff 0%, #f5f9ff 100%);
+          color: var(--text);
           line-height: 1.6;
           font-size: 16px;
+        }
+
+        #root {
+          background: var(--app-bg);
+          height: 100dvh;
+          min-height: 100dvh;
+          overflow: hidden;
+        }
+
+        .tadbira-shell {
+          background:
+            radial-gradient(circle at 12% 8%, rgba(16, 185, 129, 0.08), transparent 26rem),
+            radial-gradient(circle at 90% 92%, rgba(37, 99, 235, 0.08), transparent 30rem),
+            #edf5ff;
+        }
+
+        .tadbira-sidebar {
+          background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(239, 250, 249, 0.96) 72%, rgba(232, 243, 255, 0.96)),
+            #f8fbff;
+        }
+
+        .tadbira-header {
+          background: linear-gradient(90deg, rgba(248, 251, 255, 0.98), rgba(239, 250, 249, 0.94) 68%, rgba(239, 246, 255, 0.96));
+          backdrop-filter: blur(16px);
+        }
+
+        .tadbira-main {
+          background:
+            radial-gradient(circle at 100% 0%, rgba(99, 102, 241, 0.075), transparent 26rem),
+            radial-gradient(circle at 0% 100%, rgba(16, 185, 129, 0.06), transparent 28rem),
+            linear-gradient(135deg, #f1f6ff 0%, #f9fbff 48%, #edf9f7 100%);
+        }
+
+        @media (max-width: 1023px) {
+          .tadbira-sidebar {
+            box-shadow: 18px 0 40px rgba(15, 23, 42, 0.16);
+          }
         }
 
         .teks-standar {
           font-size: 16px;
         }
 
-        /* 5. PENGATURAN KHUSUS UNTUK TEKS ARAB MANUAL (BLOK BESAR) */
         .teks-arab {
           font-size: 24px !important;
           line-height: 2.0 !important;
           direction: rtl;
           text-align: right;
-          display: block; /* Agar RTL (Right-to-Left) bekerja sempurna */
+          display: block;
         }
-        
-        @keyframes shake { 
-          0%, 100% { transform: translateX(0); } 
-          25% { transform: translateX(-5px); } 
-          75% { transform: translateX(5px); } 
+
+        ::selection {
+          background: rgba(37, 99, 235, 0.18);
         }
-        
-        .animate-shake { 
-          animation: shake 0.3s ease-in-out; 
+
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-5px); }
+          75% { transform: translateX(5px); }
+        }
+
+        .animate-shake {
+          animation: shake 0.3s ease-in-out;
         }
       `}</style>
     </AuthProvider>

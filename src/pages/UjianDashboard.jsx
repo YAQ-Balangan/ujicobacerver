@@ -518,7 +518,7 @@ const UjianDashboard = () => {
         if (!latestEventsMap[evt.userKey]) {
           const age = Math.abs(currentTime - evt.timestamp);
           const isExpired =
-            (evt.type === "DONE" && age > 15 * 60 * 1000) ||
+            (evt.type === "DONE" && age > 5 * 60 * 1000) ||
             (evt.type === "LIVE" && age > 2 * 60 * 60 * 1000);
           latestEventsMap[evt.userKey] = isExpired ? "EXPIRED" : evt.data;
         }
@@ -619,8 +619,10 @@ const UjianDashboard = () => {
         },
       )
       .subscribe();
+    const refreshTimer = setInterval(fetchLiveStatus, 30 * 1000);
 
     return () => {
+      clearInterval(refreshTimer);
       supabase.removeChannel(channel);
     };
   }, [activeTab, isInitialLoad]);
@@ -1358,8 +1360,8 @@ const UjianDashboard = () => {
 
   return (
     <Dashboard menu={menuItems} active={activeTab} setActive={setActiveTab}>
-      <div className="flex flex-col h-[calc(115vh)] max-w-[90rem] mx-auto p-2 md:p-4 font-sans select-none overflow-hidden gap-4 relative">
-        <div className="bg-white p-4 md:p-5 rounded-[1.5rem] border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between shrink-0 gap-4">
+      <div className="flex flex-col min-h-[calc(100dvh-4rem)] md:min-h-[calc(100dvh-5rem)] max-w-[90rem] mx-auto p-1 sm:p-2 md:p-4 font-sans select-none overflow-hidden gap-3 md:gap-4 relative">
+        <div className="bg-white p-3 sm:p-4 md:p-5 rounded-[1.5rem] border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between shrink-0 gap-3 md:gap-4">
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(-1)}
@@ -1369,16 +1371,16 @@ const UjianDashboard = () => {
               <ArrowLeft size={20} />
             </button>
             <div>
-              <h2 className="text-xl md:text-2xl font-black text-slate-800 flex items-center gap-2">
+              <h2 className="text-lg sm:text-xl md:text-2xl leading-tight font-black text-slate-800 flex items-start sm:items-center gap-2">
                 {activeTab === "live" ? (
                   <>
-                    <MonitorSmartphone className="text-indigo-600" /> Pemantauan
-                    Kelas Virtual
+                    <MonitorSmartphone className="text-indigo-600 shrink-0 mt-0.5 sm:mt-0" size={20} />{" "}
+                    <span>Pemantauan Kelas Virtual</span>
                   </>
                 ) : (
                   <>
-                    <SettingsIcon className="text-indigo-500" /> Atur Denah
-                    Ujian
+                    <SettingsIcon className="text-indigo-500 shrink-0 mt-0.5 sm:mt-0" size={20} />{" "}
+                    <span>Atur Denah Ujian</span>
                   </>
                 )}
               </h2>

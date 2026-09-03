@@ -1,6 +1,6 @@
 // src/components/ui/Ui.jsx
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   ChevronDown,
   Check,
@@ -11,12 +11,62 @@ import {
 import "katex/dist/katex.min.css";
 import renderMathInElement from "katex/contrib/auto-render";
 
+export const Skeleton = ({ className = "" }) => (
+  <span
+    aria-hidden="true"
+    className={`block animate-pulse rounded-lg bg-slate-200/80 ${className}`}
+  />
+);
+
+export const PageSkeleton = ({ label = "Memuat halaman" }) => (
+  <div
+    role="status"
+    aria-label={label}
+    className="min-h-full space-y-5 p-1"
+  >
+    <div className="flex items-center justify-between gap-4">
+      <div className="space-y-3">
+        <Skeleton className="h-8 w-52" />
+        <Skeleton className="h-4 w-72 max-w-[70vw]" />
+      </div>
+      <Skeleton className="hidden h-11 w-32 sm:block" />
+    </div>
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {[1, 2, 3, 4].map((item) => (
+        <Skeleton key={item} className="h-28 w-full rounded-2xl" />
+      ))}
+    </div>
+    <Skeleton className="h-14 w-full rounded-2xl" />
+    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="space-y-4">
+        {[1, 2, 3, 4, 5].map((item) => (
+          <Skeleton key={item} className="h-10 w-full" />
+        ))}
+      </div>
+    </div>
+    <span className="sr-only">{label}</span>
+  </div>
+);
+
+export const TableSkeleton = ({ rows = 6, columns = 4 }) => (
+  <div role="status" aria-label="Memuat data" className="space-y-3 p-5">
+    {Array.from({ length: rows }, (_, row) => (
+      <div key={row} className="grid gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+        {Array.from({ length: columns }, (_, column) => (
+          <Skeleton key={column} className="h-9 w-full" />
+        ))}
+      </div>
+    ))}
+    <span className="sr-only">Memuat data</span>
+  </div>
+);
+
 // ==========================================
 // CARD (KARTU UTAMA 3D TIMBUL)
 // ==========================================
 export const Card = ({ children, className = "" }) => (
   <div
-    className={`bg-slate-100 rounded-[1.5rem] md:rounded-[2rem] shadow-[10px_10px_20px_#cbd5e1,-10px_-10px_20px_#ffffff] transition-all duration-300 ${className}`}
+    className={`bg-white border border-slate-200 rounded-[1.5rem] md:rounded-[2rem] shadow-[0_12px_28px_rgba(15,23,42,0.08)] transition-all duration-300 ${className}`}
   >
     {children}
   </div>
@@ -30,20 +80,20 @@ export const Badge = ({ type }) => {
 
   // Desain gelembung 3D untuk badge
   const map = {
-    admin: "text-amber-600 shadow-[3px_3px_6px_#cbd5e1,-3px_-3px_6px_#ffffff]",
-    guru: "text-emerald-600 shadow-[3px_3px_6px_#cbd5e1,-3px_-3px_6px_#ffffff]",
-    siswa: "text-slate-500 shadow-[3px_3px_6px_#cbd5e1,-3px_-3px_6px_#ffffff]",
+    admin: "bg-amber-100 text-amber-800 border border-amber-200",
+    guru: "bg-emerald-100 text-emerald-800 border border-emerald-200",
+    siswa: "bg-sky-100 text-sky-800 border border-sky-200",
     Aktif:
-      "bg-emerald-500 text-white shadow-[3px_3px_6px_#cbd5e1,-3px_-3px_6px_#ffffff] animate-pulse",
+      "bg-emerald-500 text-white border border-emerald-600",
     Selesai:
-      "text-slate-400 shadow-[inset_2px_2px_4px_#cbd5e1,inset_-2px_-2px_4px_#ffffff]", // Efek selesai (melesak ke dalam)
-    Draft: "text-amber-500 shadow-[3px_3px_6px_#cbd5e1,-3px_-3px_6px_#ffffff]",
-    guest: "text-slate-400 shadow-[3px_3px_6px_#cbd5e1,-3px_-3px_6px_#ffffff]",
+      "bg-slate-200 text-slate-700 border border-slate-300",
+    Draft: "bg-amber-100 text-amber-800 border border-amber-200",
+    guest: "bg-slate-200 text-slate-700 border border-slate-300",
   };
 
   return (
     <span
-      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center justify-center w-max bg-slate-100 ${map[safeType] || map.guest}`}
+      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center justify-center w-max ${map[safeType] || map.guest}`}
     >
       {safeType}
     </span>

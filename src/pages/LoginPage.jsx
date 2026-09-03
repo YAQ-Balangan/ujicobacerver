@@ -11,6 +11,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { AuthContext } from "../context/AuthContext";
+import { isSupabaseReady } from "../api/api";
 import logoTADBIRA from "../assets/logo.svg";
 
 const LoginPage = () => {
@@ -60,6 +61,13 @@ const LoginPage = () => {
             Online Based Test 2026
           </p>
         </div>
+
+        {!isSupabaseReady && (
+          <div className="mb-4 p-3 bg-amber-50 text-amber-700 text-[10px] font-bold rounded-xl shadow-[inset_3px_3px_6px_#fcd34d,inset_-3px_-3px_6px_#fff7ed] flex items-center justify-center gap-1.5">
+            <AlertTriangle size={12} />
+            Konfigurasi Supabase belum siap. Salin .env.example ke .env lalu isi URL & anon key.
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 p-3 bg-red-50 text-red-600 text-[10px] font-bold rounded-xl shadow-[inset_3px_3px_6px_#fca5a5,inset_-3px_-3px_6px_#fef2f2] flex items-center justify-center gap-1.5">

@@ -3,11 +3,45 @@ import { createClient } from '@supabase/supabase-js';
 
 export const APP_NAME = "CBT-MASDA-2026";
 
-// Kredensial Supabase diambil dari file .env agar aman dari kebocoran
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const envErrorMessage =
+  "Supabase belum dikonfigurasi. Salin file .env.example menjadi .env lalu isi VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY dengan kredensial valid Anda.";
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || "").trim();
+const supabaseKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
+const isSupabaseConfigured = Boolean(supabaseUrl) && Boolean(supabaseKey);
+
+const createSupabaseFallback = () => {
+  const throwConfigError = () => {
+    throw new Error(envErrorMessage);
+  };
+
+  const queryBuilder = () => ({
+    select: () => { throwConfigError(); },
+    insert: () => { throwConfigError(); },
+    update: () => { throwConfigError(); },
+    delete: () => { throwConfigError(); },
+    upsert: () => { throwConfigError(); },
+    order: () => queryBuilder(),
+    limit: () => queryBuilder(),
+    eq: () => queryBuilder(),
+    ilike: () => queryBuilder(),
+    in: () => queryBuilder(),
+    lt: () => queryBuilder(),
+    on: () => ({ subscribe: () => Promise.resolve() }),
+    subscribe: () => Promise.resolve(),
+  });
+
+  return {
+    from: () => queryBuilder(),
+    channel: () => ({
+      on: () => ({ subscribe: () => Promise.resolve() }),
+      subscribe: () => Promise.resolve(),
+    }),
+  };
+};
+
+export const supabase = isSupabaseConfigured ? createClient(supabaseUrl, supabaseKey) : createSupabaseFallback();
+export const isSupabaseReady = isSupabaseConfigured;
 
 export const api = {
     // 1. LOGIN
@@ -22,6 +56,7 @@ export const api = {
         if (data && data.length > 0) {
             const user = data[0];
             delete user.password;
+            user.role = String(user.role || "").trim().toLowerCase();
             return user;
         }
         throw new Error("Gagal Login: Username atau Password Salah");
@@ -74,6 +109,14 @@ export const api = {
 
         if (error) throw new Error(error.message);
         return data;
+    },
+
+    submitNilai: async (payloadData) => {
+        const { error } = await supabase
+            .from('nilai')
+            .insert([payloadData]);
+
+        if (error && error.code !== '23505') throw new Error(error.message);
     },
 
     // 4. UPDATE (Edit Data)
@@ -215,7 +258,7 @@ export const api = {
     getSesiTerkunci: async () => {
         const { data, error } = await supabase
             .from('sesi_ujian')
-            .select('*')
+            .select('id_sesi, username_siswa, id_ujian, status, pelanggaran, updated_at')
             .eq('status', 'LOCKED');
 
         if (error) throw new Error(error.message);
@@ -230,6 +273,39 @@ export const api = {
             .delete()
             .eq('id_sesi', idSesi);
 
-        if (error) console.error("Gagal reset sesi ujian:", error.message);
+        if (error) throw new Error(error.message);
+    },
+
+    cleanupStaleSesi: async () => {
+        const cutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        const { data, error } = await supabase
+            .from('sesi_ujian')
+            .select('id_sesi, username_siswa, id_ujian')
+            .lt('updated_at', cutoff);
+
+        if (error) throw new Error(error.message);
+        if (!data || data.length === 0) return 0;
+
+        let deletedCount = 0;
+        for (const sesi of data) {
+            const { data: nilai, error: nilaiError } = await supabase
+                .from('nilai')
+                .select('id')
+                .eq('username', sesi.username_siswa)
+                .eq('id_ujian', sesi.id_ujian)
+                .limit(1);
+
+            if (nilaiError) throw new Error(nilaiError.message);
+            if (!nilai || nilai.length === 0) continue;
+
+            const { error: deleteError } = await supabase
+                .from('sesi_ujian')
+                .delete()
+                .eq('id_sesi', sesi.id_sesi);
+
+            if (deleteError) throw new Error(deleteError.message);
+            deletedCount += 1;
+        }
+        return deletedCount;
     }
 };

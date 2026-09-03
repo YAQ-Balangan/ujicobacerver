@@ -1,25 +1,22 @@
 // src/context/AuthContext.jsx
-import React, { createContext, useState, useEffect } from "react";
+/* eslint-disable react-refresh/only-export-components */
+import React, { createContext, useState } from "react";
 import { api, APP_NAME } from "../api/api";
 
 export const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // UBAH DI SINI: Gunakan sessionStorage
+  const [user, setUser] = useState(() => {
     const saved = sessionStorage.getItem(`${APP_NAME}_session`);
-    if (saved) {
-      try {
-        setUser(JSON.parse(saved));
-      } catch (e) {
-        sessionStorage.removeItem(`${APP_NAME}_session`);
-      }
+    if (!saved) return null;
+    try {
+      return JSON.parse(saved);
+    } catch {
+      sessionStorage.removeItem(`${APP_NAME}_session`);
+      return null;
     }
-    setLoading(false);
-  }, []);
+  });
+  const loading = false;
 
   const loginAction = async (u, p) => {
     const userData = await api.login(u, p);

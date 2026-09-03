@@ -1,4 +1,5 @@
 // src/pages/GuruDashboard.jsx
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, {
   useState,
   useEffect,
@@ -57,8 +58,10 @@ import {
   Badge,
   PremiumSelect,
   PremiumMultiSelect,
+  TableSkeleton,
 } from "../components/ui/Ui";
 import { AuthContext } from "../context/AuthContext";
+import { findSetting, isSettingEnabled } from "../utils/settings";
 import SSmode from "../components/modals/SSmode";
 
 // === IMPORT FILE MODAL YANG BARU DIBUAT ===
@@ -462,7 +465,7 @@ const GuruDashboard = () => {
   const [bulkMapel, setBulkMapel] = useState("");
   const [bulkKelas, setBulkKelas] = useState("");
   const [bulkPoin, setBulkPoin] = useState("2");
-  const [bulkProgress, setBulkProgress] = useState(0);
+  const [, setBulkProgress] = useState(0);
 
   const [isDummyModalOpen, setIsDummyModalOpen] = useState(false);
   const [dummyConfig, setDummyConfig] = useState({
@@ -474,6 +477,8 @@ const GuruDashboard = () => {
   const [isUploadingFormImg, setIsUploadingFormImg] = useState(false);
 
   const [nilaiViewMode, setNilaiViewMode] = useState("rekap");
+  const [nilaiPage, setNilaiPage] = useState(1);
+  const nilaiPageSize = 25;
 
   const showAlert = (type, title, message, onConfirm = null) => {
     setCustomAlert({ isOpen: true, type, title, message, onConfirm });
@@ -806,38 +811,6 @@ const GuruDashboard = () => {
     }
   };
 
-  const fetchLiveMonitoring = async () => {
-    setIsSyncing(true);
-    try {
-      const [resNilai, lockedRes] = await Promise.all([
-        api.read(TAB_CONFIG.nilai.sheet),
-        api.getSesiTerkunci().catch(() => []),
-      ]);
-
-      const finalNilai = resNilai || [];
-      const finalLocked = lockedRes || [];
-
-      setAllData((prev) => {
-        const newData = {
-          ...prev,
-          nilai: finalNilai,
-        };
-        return JSON.stringify(prev) !== JSON.stringify(newData)
-          ? newData
-          : prev;
-      });
-      setSesiUjianData(finalLocked);
-
-      // Simpan juga ke brankas lokal, agar jika guru refresh halaman, datanya tidak mundur ke belakang
-      localStorage.setItem("tadbira_cache_nilai", JSON.stringify(finalNilai));
-      localStorage.setItem("tadbira_cache_sesi", JSON.stringify(finalLocked));
-    } catch (error) {
-      console.error("Gagal refresh live monitoring:", error);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   useEffect(() => {
     // Tarik data penuh satu kali saja saat halaman pertama kali dibuka
     fetchAllData(false);
@@ -1161,7 +1134,18 @@ const GuruDashboard = () => {
   const handleUnlockSesi = async (username, examId) => {
     try {
       setLoading(true);
-      await api.updateSesiStatus(username, examId, "ACTIVE", 1);
+      const sesiTerkunci = sesiUjianData.find(
+        (sesi) =>
+          sesi.username_siswa === username &&
+          String(sesi.id_ujian) === String(examId),
+      );
+      const pelanggaranSaatIni = Number(sesiTerkunci?.pelanggaran) || 0;
+      await api.updateSesiStatus(
+        username,
+        examId,
+        "ACTIVE",
+        pelanggaranSaatIni,
+      );
       showAlert(
         "success",
         "Akses Dibuka",
@@ -1174,6 +1158,26 @@ const GuruDashboard = () => {
         "Gagal",
         "Sistem gagal membuka kunci. Periksa koneksi internet: " + err.message,
       );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReopenDisqualified = async (item) => {
+    try {
+      setLoading(true);
+      await api.update("Nilai", item.id, { status: "DIBUKA_ULANG" });
+      if (item.username && item.id_ujian) {
+        await api.deleteSesi(item.username, item.id_ujian);
+      }
+      await fetchData(false);
+      showAlert(
+        "success",
+        "Kesempatan Dibuka",
+        `Siswa ${item.nama_siswa || item.username} dapat menggunakan kesempatan berikutnya. Riwayat nilai tetap tersimpan.`,
+      );
+    } catch (error) {
+      showAlert("danger", "Gagal Membuka", error.message);
     } finally {
       setLoading(false);
     }
@@ -1219,7 +1223,7 @@ const GuruDashboard = () => {
     const isEksakta =
       /√|\^|∑|∫|lim|sin|cos|tan|log|kuadrat|m\/s|joule|watt|newton|co2|h2o/i.test(
         textLower,
-      ) || /[\+\-\*\/\=\(\)\d]{6,}/.test(textLower);
+      ) || /[+*\u002f=\d()-]{6,}/.test(textLower);
 
     const isBahasa =
       /bacalah teks|cermatilah|kutipan|wacana|paragraf|gagasan utama|sinonim|antonim|puisi|berikut|/i.test(
@@ -1249,7 +1253,7 @@ const GuruDashboard = () => {
         continue;
       }
 
-      let optMatch = lineTrimmed.match(/^\s*\*?([a-eA-E])\*?(?:[\.\)]|\s+)/);
+      let optMatch = lineTrimmed.match(/^\s*\*?([a-eA-E])\*?(?:[.)]|\s+)/);
       let isOpt = !!optMatch;
       let optLetter = isOpt ? optMatch[1].toLowerCase() : null;
 
@@ -1261,7 +1265,7 @@ const GuruDashboard = () => {
         let poppedLines = [];
         while (currentBlock.length > 0) {
           let lastLine = currentBlock[currentBlock.length - 1];
-          let isLastOpt = /^\s*\*?[a-eA-E]\*?(?:[\.\)]|\s+)/.test(lastLine);
+          let isLastOpt = /^\s*\*?[a-eA-E]\*?(?:[.)]|\s+)/.test(lastLine);
           let isLastKunci = /^\s*(?:Jawaban|Kunci)\s*:/i.test(lastLine);
 
           if (!isLastOpt && !isLastKunci) {
@@ -1281,7 +1285,7 @@ const GuruDashboard = () => {
       }
 
       let isKunci = /^\s*(?:Jawaban|Kunci)\s*:/i.test(lineTrimmed);
-      let isNumbered = /^\s*\d+[\.\)]\s*/.test(lineTrimmed);
+      let isNumbered = /^\s*\d+[.)]\s*/.test(lineTrimmed);
       let isWacanaMarker =
         /^\s*(perhatikan|cermatilah|cermati|bacalah|baca|amatilah|amati|wacana|teks|kutipan|dialog|gambar|tabel|grafik|berikut)/i.test(
           lineTrimmed,
@@ -1766,6 +1770,10 @@ Patuhi aturan berikut secara ketat:
     return result;
   }, [data, search, filters]);
 
+  useEffect(() => {
+    setNilaiPage(1);
+  }, [tab, search, filters]);
+
   const lockedSessions = sesiUjianData.filter((s) => s.status === "LOCKED");
   const disqualifiedSessions = processedData.filter(
     (d) =>
@@ -1909,6 +1917,15 @@ Patuhi aturan berikut secara ketat:
 
     return { data: filteredPivot, mapels: filteredMapels };
   }, [data, tab, search, filters.kelas, filters.mapel]);
+
+  const paginatedNilai = useMemo(() => {
+    const start = (nilaiPage - 1) * nilaiPageSize;
+    return pivotNilaiData.data.slice(start, start + nilaiPageSize);
+  }, [pivotNilaiData.data, nilaiPage]);
+  const nilaiPageCount = Math.max(
+    1,
+    Math.ceil(pivotNilaiData.data.length / nilaiPageSize),
+  );
 
   const getFilterOptions = (key) =>
     [...new Set(data.map((item) => item[key]))].filter(Boolean).sort();
@@ -2225,9 +2242,10 @@ Patuhi aturan berikut secara ketat:
     }
   };
 
-  const isDeleteAllAllowed =
-    allData.settings?.find((s) => s.kunci === "Hapus_Semua_Soal")?.nilai !==
-    "OFF";
+  const isDeleteAllAllowed = isSettingEnabled(
+    findSetting(allData.settings, "HAPUS_SEMUA_SOAL")?.nilai,
+    true,
+  );
 
   return (
     <Dashboard menu={MENU_ITEMS} active={tab} setActive={setTab}>
@@ -2920,15 +2938,7 @@ Patuhi aturan berikut secara ketat:
         )}
 
         {loading && data.length === 0 ? (
-          <div className="py-20 text-center flex flex-col items-center">
-            <RefreshCw
-              className="animate-spin text-emerald-500 mb-4"
-              size={32}
-            />
-            <span className="font-bold text-slate-400 uppercase tracking-widest text-xs">
-              Memuat Database...
-            </span>
-          </div>
+          <TableSkeleton rows={7} columns={4} />
         ) : tab === "soal" ? (
           <div className="max-w-6xl mx-auto relative">
             {soalViewMode === "folder" && (
@@ -3167,7 +3177,7 @@ Patuhi aturan berikut secara ketat:
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {pivotNilaiData.data.map((item, idx) => (
+                          {paginatedNilai.map((item, idx) => (
                             <tr
                               key={`${item.nama_siswa}_${item.kelas}`}
                               className="hover:bg-emerald-50/40 transition-colors group bg-white"
@@ -3181,7 +3191,7 @@ Patuhi aturan berikut secara ketat:
                                 }}
                                 className="px-6 py-4 font-bold text-slate-400 bg-white border-r border-slate-100 text-center group-hover:bg-emerald-50 transition-colors"
                               >
-                                {idx + 1}
+                                {(nilaiPage - 1) * nilaiPageSize + idx + 1}
                               </td>
                               <td
                                 style={{
@@ -3224,6 +3234,17 @@ Patuhi aturan berikut secara ketat:
                     )}
                   </div>
                 </Card>
+                {nilaiPageCount > 1 && (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3">
+                    <span className="text-xs font-semibold text-slate-500">
+                      Halaman {nilaiPage} dari {nilaiPageCount} ({pivotNilaiData.data.length} siswa)
+                    </span>
+                    <div className="flex gap-2">
+                      <button type="button" disabled={nilaiPage === 1} onClick={() => setNilaiPage((page) => page - 1)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 disabled:cursor-not-allowed disabled:opacity-40">Sebelumnya</button>
+                      <button type="button" disabled={nilaiPage === nilaiPageCount} onClick={() => setNilaiPage((page) => page + 1)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">Berikutnya</button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="md:hidden flex flex-col gap-4">
                   {pivotNilaiData.data.length === 0 ? (
@@ -3231,14 +3252,14 @@ Patuhi aturan berikut secara ketat:
                       Belum ada nilai ujian masuk.
                     </div>
                   ) : (
-                    pivotNilaiData.data.map((item, idx) => (
+                    paginatedNilai.map((item, idx) => (
                       <Card
                         key={`${item.nama_siswa}_${item.kelas}`}
                         className="p-4 bg-white border border-slate-200 shadow-sm rounded-2xl"
                       >
                         <div className="flex justify-between items-start mb-3 pb-3 border-b border-slate-100">
                           <span className="font-black text-slate-800 text-[16px] leading-tight line-clamp-2">
-                            {idx + 1}. {item.nama_siswa}
+                            {(nilaiPage - 1) * nilaiPageSize + idx + 1}. {item.nama_siswa}
                           </span>
                           <span className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-md font-bold text-[10px] text-slate-600 shrink-0">
                             {item.kelas}
@@ -3600,13 +3621,22 @@ Patuhi aturan berikut secara ketat:
                                 {item.skor}
                               </td>
                               <td className="px-6 py-4 text-center">
-                                <button
-                                  onClick={() => openReviewModal(item)}
-                                  className="p-2 bg-slate-700 text-blue-400 hover:text-white hover:bg-blue-500 rounded-lg transition-colors"
-                                  title="Lihat Seberapa Jauh Ia Mengerjakan"
-                                >
-                                  <Eye size={16} />
-                                </button>
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => openReviewModal(item)}
+                                    className="p-2 bg-slate-700 text-blue-400 hover:text-white hover:bg-blue-500 rounded-lg transition-colors"
+                                    title="Lihat Seberapa Jauh Ia Mengerjakan"
+                                  >
+                                    <Eye size={16} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleReopenDisqualified(item)}
+                                    className="px-3 py-2 bg-emerald-600 text-white hover:bg-emerald-500 rounded-lg transition-colors text-xs font-bold"
+                                    title="Buka satu kesempatan baru tanpa menghapus riwayat"
+                                  >
+                                    Buka Lagi
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))}

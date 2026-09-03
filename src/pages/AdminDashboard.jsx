@@ -1,6 +1,8 @@
 // src/pages/AdminDashboard.jsx
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useEffect, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Calendar,
   BookMarked,
@@ -26,16 +28,67 @@ import {
   Printer, // <-- Tambahan
   Files, // <-- Tambahan
   Share2, // <-- Tambahan
+  Timer,
 } from "lucide-react";
 import { api, supabase } from "../api/api";
 import Dashboard from "../components/layout/Dashboard";
+import FiltersToolbar from "../features/admin/components/FiltersToolbar";
 // === KITA IMPOR KOMPONEN UI DARI Ui.jsx ===
 import {
   Card,
   Badge,
   PremiumSelect,
   PremiumMultiSelect,
+  PageSkeleton,
 } from "../components/ui/Ui";
+const TabSiswa = React.lazy(() => import("../features/admin/tabs/SiswaTab"));
+const TabJadwal = React.lazy(() => import("../features/admin/tabs/JadwalTab"));
+const TabMapel = React.lazy(() => import("../features/admin/tabs/MapelTab"));
+const TabSettings = React.lazy(() => import("../features/admin/tabs/SettingsTab"));
+
+const SettingToggle = ({ label, description, checked, onClick, icon: Icon }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    onClick={onClick}
+    className="flex w-full items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-emerald-300 hover:shadow-md"
+  >
+    <span className="flex min-w-0 items-center gap-3">
+      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${checked ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+        <Icon size={18} />
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-black text-slate-800">{label}</span>
+        <span className="mt-0.5 block text-xs font-medium text-slate-500">{description}</span>
+      </span>
+    </span>
+    <span className={`relative h-7 w-12 shrink-0 rounded-full transition ${checked ? "bg-emerald-500" : "bg-slate-300"}`}>
+      <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition ${checked ? "left-6" : "left-1"}`} />
+    </span>
+  </button>
+);
+
+const CompactSettingToggle = ({ label, checked, onClick, icon: Icon }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    aria-label={`${label}: ${checked ? "aktif" : "nonaktif"}`}
+    onClick={onClick}
+    className={`flex min-w-0 flex-1 items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition ${
+      checked
+        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+        : "border-slate-200 bg-white text-slate-500"
+    }`}
+  >
+    <span className="flex min-w-0 items-center gap-2">
+      <Icon size={15} className="shrink-0" />
+      <span className="truncate text-[10px] font-black uppercase tracking-wide">{label}</span>
+    </span>
+    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${checked ? "bg-emerald-500" : "bg-slate-300"}`} />
+  </button>
+);
 
 // ==========================================
 // HELPER: FORMAT TANGGAL
@@ -58,7 +111,7 @@ const formatTanggal = (isoString) => {
           minute: "2-digit",
         })
         .replace(/\./g, ":");
-    } catch (e) {
+    } catch {
       return isoString;
     }
   }
@@ -267,169 +320,15 @@ const MENU_ITEMS = [
 // ==========================================
 // KOMPONEN INLINE EDIT (GOOGLE SHEETS STYLE)
 // ==========================================
-const EditableCell = ({ item, column, onSave }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [val, setVal] = useState(item[column.key] || "");
-
-  useEffect(() => {
-    setVal(item[column.key] || "");
-  }, [item[column.key]]);
-
-  const triggerSave = () => {
-    setIsEditing(false);
-    if (String(val).trim() !== String(item[column.key] || "").trim()) {
-      onSave(item.id, column.key, val);
-    }
-  };
-
-  if (isEditing) {
-    if (column.isMultiSelect) {
-      return (
-        <div className="flex flex-col gap-1.5 min-w-[200px]">
-          <PremiumMultiSelect
-            value={val}
-            onChange={(newVal) => setVal(newVal)}
-            options={column.options}
-            placeholder="Pilih Kelas..."
-          />
-          <div className="flex gap-1 mt-1">
-            <button
-              onMouseDown={(e) => {
-                e.preventDefault();
-                triggerSave();
-              }}
-              className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black tracking-widest uppercase py-1.5 rounded shadow-sm transition-colors"
-            >
-              Simpan
-            </button>
-            <button
-              onMouseDown={(e) => {
-                e.preventDefault();
-                setIsEditing(false);
-                setVal(item[column.key] || "");
-              }}
-              className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-600 text-[10px] font-black tracking-widest uppercase py-1.5 rounded transition-colors"
-            >
-              Batal
-            </button>
-          </div>
-        </div>
-      );
-    }
-    if (column.isSelect) {
-      return (
-        <select
-          autoFocus
-          className="w-full p-1.5 border-2 border-emerald-500 rounded outline-none text-sm text-emerald-900 bg-emerald-50 font-bold shadow-sm"
-          value={val}
-          onChange={(e) => setVal(e.target.value)}
-          onBlur={triggerSave}
-          onKeyDown={(e) => e.key === "Enter" && triggerSave()}
-        >
-          <option value="">Pilih...</option>
-          {column.options.map((opt, i) => {
-            if (typeof opt === "object" && opt !== null) {
-              if (opt.isLabel) {
-                return (
-                  <option
-                    key={`label-${i}`}
-                    disabled
-                    className="font-black bg-slate-200 text-slate-500"
-                  >
-                    --- {opt.label} ---
-                  </option>
-                );
-              }
-              return (
-                <option key={`opt-${i}`} value={opt.value}>
-                  {opt.label}
-                </option>
-              );
-            }
-            return (
-              <option key={`str-${i}`} value={opt}>
-                {opt}
-              </option>
-            );
-          })}
-        </select>
-      );
-    }
-
-    if (column.isDate) {
-      return (
-        <input
-          autoFocus
-          type="date"
-          className="w-full p-1.5 border-2 border-emerald-500 rounded outline-none text-sm text-emerald-900 bg-emerald-50 font-bold shadow-sm"
-          value={val}
-          onChange={(e) => setVal(e.target.value)}
-          onBlur={triggerSave}
-          onKeyDown={(e) => e.key === "Enter" && triggerSave()}
-        />
-      );
-    }
-
-    if (column.isCombobox) {
-      const listId = `list-${column.key}-${item.id}`;
-      return (
-        <>
-          <input
-            autoFocus
-            list={listId}
-            type="text"
-            className="w-full p-1.5 border-2 border-emerald-500 rounded outline-none text-sm text-emerald-900 bg-emerald-50 font-bold shadow-sm"
-            value={val}
-            onChange={(e) => setVal(e.target.value)}
-            onBlur={triggerSave}
-            onKeyDown={(e) => e.key === "Enter" && triggerSave()}
-            placeholder="Ketik atau pilih..."
-          />
-          <datalist id={listId}>
-            {column.options.map((opt) => (
-              <option key={opt} value={opt} />
-            ))}
-          </datalist>
-        </>
-      );
-    }
-
-    return (
-      <input
-        autoFocus
-        type={column.isNumber ? "number" : "text"}
-        className="w-full p-1.5 border-2 border-emerald-500 rounded outline-none text-sm text-emerald-900 bg-emerald-50 font-bold shadow-sm"
-        value={val}
-        onChange={(e) => setVal(e.target.value)}
-        onBlur={triggerSave}
-        onKeyDown={(e) => e.key === "Enter" && triggerSave()}
-        placeholder="Ketik lalu Enter..."
-      />
-    );
-  }
-
-  return (
-    <div
-      onClick={() => setIsEditing(true)}
-      className={`w-full min-h-[28px] cursor-text hover:bg-emerald-50 hover:ring-1 hover:ring-emerald-200 rounded px-1.5 flex items-center transition-colors ${column.key === "id" ? "font-mono text-xs text-slate-500 bg-slate-100 border border-slate-200 hover:border-emerald-300 w-max" : "text-slate-700"}`}
-      title="Klik untuk mengubah"
-    >
-      {column.key === "role" || column.key === "status" ? (
-        <Badge type={val || "Kosong"} />
-      ) : column.key === "id" ? (
-        `#${val}`
-      ) : (
-        val || <span className="text-slate-300 italic text-xs">Kosong...</span>
-      )}
-    </div>
-  );
-};
+import EditableCell from "../components/ui/EditableCell";
+import { findSetting, isSettingEnabled } from "../utils/settings";
 
 // ==========================================
 // KOMPONEN UTAMA
 // ==========================================
-const AdminDashboard = () => {
-  const [tab, setTab] = useState("siswa");
+const AdminDashboard = ({ initialTab = "siswa" }) => {
+  const navigate = useNavigate();
+  const [tab, setTab] = useState(initialTab || "siswa");
 
   const [allData, setAllData] = useState({
     siswa: [],
@@ -537,42 +436,18 @@ const AdminDashboard = () => {
     if (!currentConfig) return;
     if (!isBackground) setLoading(true);
     if (isBackground) setIsSyncing(true);
-
     try {
-      const refreshCurrentTab = async (isBackground = false) => {
-        if (!currentConfig) return;
-        if (!isBackground) setLoading(true);
-        if (isBackground) setIsSyncing(true);
-
-        try {
-          const result = await api.read(currentConfig.sheet);
-          setAllData((prev) => ({ ...prev, [tab]: result || [] }));
-
-          // Update cache untuk tab yang sedang dibuka agar selalu fresh
-          localStorage.setItem(
-            `tadbira_admin_${tab}`,
-            JSON.stringify(result || []),
-          );
-        } catch (error) {
-          console.warn(`Gagal merefresh data ${tab}:`, error);
-        } finally {
-          setLoading(false);
-          setIsSyncing(false);
-        }
-      };
       const result = await api.read(currentConfig.sheet);
       setAllData((prev) => ({ ...prev, [tab]: result || [] }));
+      localStorage.setItem(`tadbira_admin_${tab}`, JSON.stringify(result || []));
     } catch (error) {
-      console.error(`Gagal merefresh data ${tab}:`, error);
+      console.warn(`Gagal merefresh data ${tab}:`, error);
     } finally {
       setLoading(false);
       setIsSyncing(false);
     }
   };
 
-  useEffect(() => {
-    fetchAllData(false);
-  }, []);
   useEffect(() => {
     fetchAllData(false);
 
@@ -798,12 +673,8 @@ const AdminDashboard = () => {
       .sort();
   };
 
-  const antiCheatSetting = allData.settings.find(
-    (item) => String(item.kunci).toLowerCase() === "mode_ujian",
-  );
-  const isAntiCheatOn = antiCheatSetting
-    ? antiCheatSetting.nilai !== "OFF"
-    : true;
+  const antiCheatSetting = findSetting(allData.settings, "MODE_UJIAN");
+  const isAntiCheatOn = isSettingEnabled(antiCheatSetting?.nilai, true);
   const handleToggleAntiCheat = async () => {
     showAlert(
       "confirm",
@@ -813,17 +684,28 @@ const AdminDashboard = () => {
         closeAlert();
         setIsSyncing(true);
         try {
+          const nextValue = isAntiCheatOn ? "OFF" : "ON";
           if (antiCheatSetting)
             await api.update("Settings", antiCheatSetting.id, {
               ...antiCheatSetting,
-              nilai: isAntiCheatOn ? "OFF" : "ON",
+              nilai: nextValue,
             });
           else
             await api.create("Settings", {
               id: (Math.max(...allData.settings.map((s) => s.id)) || 0) + 1,
               kunci: "Mode_Ujian",
-              nilai: "OFF",
+              nilai: nextValue,
             });
+          setAllData((previous) => ({
+            ...previous,
+            settings: antiCheatSetting
+              ? previous.settings.map((setting) =>
+                  setting.id === antiCheatSetting.id
+                    ? { ...setting, nilai: nextValue }
+                    : setting,
+                )
+              : [...previous.settings, { id: Date.now(), kunci: "Mode_Ujian", nilai: nextValue }],
+          }));
           await refreshCurrentTab(false);
           showAlert(
             "success",
@@ -839,10 +721,8 @@ const AdminDashboard = () => {
     );
   };
 
-  const appOnlySetting = allData.settings.find(
-    (item) => String(item.kunci).toLowerCase() === "mode_aplikasi",
-  );
-  const isAppOnlyOn = appOnlySetting ? appOnlySetting.nilai === "ON" : false;
+  const appOnlySetting = findSetting(allData.settings, "MODE_APLIKASI");
+  const isAppOnlyOn = isSettingEnabled(appOnlySetting?.nilai, false);
   const handleToggleAppOnly = async () => {
     showAlert(
       "confirm",
@@ -852,17 +732,28 @@ const AdminDashboard = () => {
         closeAlert();
         setIsSyncing(true);
         try {
+          const nextValue = isAppOnlyOn ? "OFF" : "ON";
           if (appOnlySetting)
             await api.update("Settings", appOnlySetting.id, {
               ...appOnlySetting,
-              nilai: isAppOnlyOn ? "OFF" : "ON",
+              nilai: nextValue,
             });
           else
             await api.create("Settings", {
               id: (Math.max(...allData.settings.map((s) => s.id)) || 0) + 1,
               kunci: "Mode_Aplikasi",
-              nilai: "ON",
+              nilai: nextValue,
             });
+          setAllData((previous) => ({
+            ...previous,
+            settings: appOnlySetting
+              ? previous.settings.map((setting) =>
+                  setting.id === appOnlySetting.id
+                    ? { ...setting, nilai: nextValue }
+                    : setting,
+                )
+              : [...previous.settings, { id: Date.now(), kunci: "Mode_Aplikasi", nilai: nextValue }],
+          }));
           await refreshCurrentTab(false);
           showAlert(
             "success",
@@ -878,12 +769,59 @@ const AdminDashboard = () => {
     );
   };
 
-  const deleteAllSetting = allData.settings.find(
-    (item) => String(item.kunci).toLowerCase() === "hapus_semua_soal",
-  );
-  const isDeleteAllOn = deleteAllSetting
-    ? deleteAllSetting.nilai !== "OFF"
-    : true;
+  const deleteAllSetting = findSetting(allData.settings, "HAPUS_SEMUA_SOAL");
+  const isDeleteAllOn = isSettingEnabled(deleteAllSetting?.nilai, true);
+  const timerSetting = findSetting(allData.settings, "TIMER_UJIAN");
+  const isTimerOn = isSettingEnabled(timerSetting?.nilai, true);
+  const handleToggleTimer = async () => {
+    showAlert(
+      "confirm",
+      "Ubah Timer Ujian?",
+      `Yakin ingin ${isTimerOn ? "MEMATIKAN" : "MENGAKTIFKAN"} batas waktu ujian?`,
+      async () => {
+        closeAlert();
+        setIsSyncing(true);
+        try {
+          const nextValue = isTimerOn ? "OFF" : "ON";
+          if (timerSetting) {
+            await api.update("Settings", timerSetting.id, {
+              ...timerSetting,
+              nilai: nextValue,
+            });
+          } else {
+            await api.create("Settings", {
+              id: (Math.max(...allData.settings.map((s) => s.id)) || 0) + 1,
+              kunci: "TIMER_UJIAN",
+              nilai: nextValue,
+            });
+          }
+          setAllData((previous) => ({
+            ...previous,
+            settings: timerSetting
+              ? previous.settings.map((setting) =>
+                  setting.id === timerSetting.id
+                    ? { ...setting, nilai: nextValue }
+                    : setting,
+                )
+              : [
+                  ...previous.settings,
+                  { id: Date.now(), kunci: "TIMER_UJIAN", nilai: nextValue },
+                ],
+          }));
+          await refreshCurrentTab(false);
+          showAlert(
+            "success",
+            "Berhasil!",
+            `Timer ujian ${isTimerOn ? "NONAKTIF" : "AKTIF"}.`,
+          );
+        } catch (error) {
+          showAlert("danger", "Gagal", error.message);
+        } finally {
+          setIsSyncing(false);
+        }
+      },
+    );
+  };
   const handleToggleDeleteAll = async () => {
     showAlert(
       "confirm",
@@ -893,17 +831,28 @@ const AdminDashboard = () => {
         closeAlert();
         setIsSyncing(true);
         try {
+          const nextValue = isDeleteAllOn ? "OFF" : "ON";
           if (deleteAllSetting)
             await api.update("Settings", deleteAllSetting.id, {
               ...deleteAllSetting,
-              nilai: isDeleteAllOn ? "OFF" : "ON",
+              nilai: nextValue,
             });
           else
             await api.create("Settings", {
               id: (Math.max(...allData.settings.map((s) => s.id)) || 0) + 1,
               kunci: "Hapus_Semua_Soal",
-              nilai: "OFF",
+              nilai: nextValue,
             });
+          setAllData((previous) => ({
+            ...previous,
+            settings: deleteAllSetting
+              ? previous.settings.map((setting) =>
+                  setting.id === deleteAllSetting.id
+                    ? { ...setting, nilai: nextValue }
+                    : setting,
+                )
+              : [...previous.settings, { id: Date.now(), kunci: "Hapus_Semua_Soal", nilai: nextValue }],
+          }));
           await refreshCurrentTab(false);
           showAlert(
             "success",
@@ -1023,6 +972,28 @@ const AdminDashboard = () => {
     );
   };
 
+  const tabProps = {
+    processedData,
+    loading,
+    data,
+    currentConfig,
+    allData,
+    tab,
+    handleSaveCell,
+    confirmDelete,
+    handleDuplicateRow,
+    handleCopyBroadcast,
+    getFilterOptions,
+    search,
+    setSearch,
+    filters,
+    setFilters,
+    refreshCurrentTab,
+    sortConfig,
+    handleSort,
+    isSyncing,
+  };
+
   return (
     <Dashboard menu={MENU_ITEMS} active={tab} setActive={setTab}>
       <style>{`
@@ -1094,7 +1065,7 @@ const AdminDashboard = () => {
 
           <div className="flex flex-col gap-2">
             <button
-              onClick={() => (window.location.href = "/ujian-dashboard")}
+              onClick={() => navigate("/ujian-dashboard")}
               className="w-full py-2 bg-indigo-600 text-white rounded-xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-md shadow-indigo-500/30 hover:bg-indigo-700 active:scale-95 transition-all"
             >
               <MonitorSmartphone size={16} /> Live Ujian
@@ -1107,27 +1078,11 @@ const AdminDashboard = () => {
             </button>
 
             {tab === "settings" && (
-              <div className="flex gap-2">
-                <button
-                  onClick={handleToggleAntiCheat}
-                  className={`flex-1 py-3 px-2 rounded-xl font-bold flex flex-col items-center justify-center gap-1 transition-all text-[10px] border ${isAntiCheatOn ? "bg-red-50 text-red-600 border-red-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}
-                >
-                  <ShieldCheck size={16} />{" "}
-                  <span className="text-center leading-tight">
-                    {isAntiCheatOn
-                      ? "Matikan Mode Ujian"
-                      : "Hidupkan Mode Ujian"}
-                  </span>
-                </button>
-                <button
-                  onClick={handleToggleAppOnly}
-                  className={`flex-1 py-3 px-2 rounded-xl font-bold flex flex-col items-center justify-center gap-1 transition-all text-[10px] border ${isAppOnlyOn ? "bg-amber-50 text-amber-600 border-amber-200" : "bg-slate-100 text-slate-600 border-slate-200"}`}
-                >
-                  {isAppOnlyOn ? <Unlock size={16} /> : <Lock size={16} />}{" "}
-                  <span className="text-center leading-tight">
-                    {isAppOnlyOn ? "Buka Akses Web" : "Kunci APK Saja"}
-                  </span>
-                </button>
+              <div className="grid grid-cols-1 gap-2">
+                <CompactSettingToggle label="Anti-cheat" checked={isAntiCheatOn} onClick={handleToggleAntiCheat} icon={ShieldCheck} />
+                <CompactSettingToggle label="Akses aplikasi" checked={isAppOnlyOn} onClick={handleToggleAppOnly} icon={isAppOnlyOn ? Lock : Unlock} />
+                <CompactSettingToggle label="Hapus massal" checked={isDeleteAllOn} onClick={handleToggleDeleteAll} icon={Trash2} />
+                <CompactSettingToggle label="Timer ujian" checked={isTimerOn} onClick={handleToggleTimer} icon={Timer} />
               </div>
             )}
 
@@ -1152,104 +1107,6 @@ const AdminDashboard = () => {
                 )}
               </button>
             </div>
-          </div>
-        </div>
-
-        <div className="md:hidden flex flex-col flex-1 min-h-0 bg-white border border-slate-200 rounded-[1.5rem] shadow-sm overflow-hidden mx-2 mb-2">
-          <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-slate-100">
-            {loading && data.length === 0 ? (
-              <div className="py-16 text-center">
-                <RefreshCw
-                  className="animate-spin mx-auto text-emerald-500 mb-3"
-                  size={28}
-                />
-                <span className="font-bold text-slate-400 text-xs">
-                  Memuat Data...
-                </span>
-              </div>
-            ) : processedData.length === 0 ? (
-              <div className="py-16 text-center text-slate-400 font-medium text-sm">
-                Belum ada data.
-              </div>
-            ) : (
-              processedData.map((item) => (
-                <div
-                  key={item.id}
-                  className={`p-4 transition-colors flex flex-col gap-2 ${item.isNew ? "bg-amber-50" : "hover:bg-slate-50"}`}
-                >
-                  <div className="flex justify-between items-start gap-3 border-b border-slate-100 pb-3 mb-1">
-                    <div className="flex-1">
-                      <div className="mb-2 flex items-center gap-2">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest shrink-0">
-                          ID:
-                        </span>
-                        <EditableCell
-                          item={item}
-                          column={currentConfig.columns[0]}
-                          onSave={handleSaveCell}
-                        />
-                      </div>
-                      <div className="font-black text-slate-800 text-sm mt-1">
-                        <EditableCell
-                          item={item}
-                          column={currentConfig.columns[1]}
-                          onSave={handleSaveCell}
-                        />
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => confirmDelete(item.id)}
-                      className="p-2.5 text-red-500 bg-red-50 rounded-xl border border-red-100 hover:bg-red-500 hover:text-white transition-colors shrink-0"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-
-                  <div className="flex flex-col gap-2.5 text-xs">
-                    {currentConfig.columns.slice(2).map((col) => (
-                      <div
-                        key={col.key}
-                        className="flex flex-col gap-1 bg-slate-50/50 p-2 rounded-lg border border-slate-100"
-                      >
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                          {col.label}
-                        </span>
-                        <div className="font-semibold text-slate-700">
-                          <EditableCell
-                            item={item}
-                            column={
-                              col.key === "mapel" && tab === "jadwal"
-                                ? {
-                                    ...col,
-                                    options: [
-                                      ...new Set(
-                                        allData.mapel
-                                          .map((m) => m.nama_mapel)
-                                          .filter(Boolean),
-                                      ),
-                                    ],
-                                  }
-                                : col.isCombobox
-                                  ? {
-                                      ...col,
-                                      options: [
-                                        ...new Set([
-                                          ...col.options,
-                                          ...getFilterOptions(col.key),
-                                        ]),
-                                      ],
-                                    }
-                                  : col
-                            }
-                            onSave={handleSaveCell}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))
-            )}
           </div>
         </div>
 
@@ -1279,32 +1136,15 @@ const AdminDashboard = () => {
           </div>
           <div className="w-full md:w-auto flex flex-col md:flex-row gap-3 z-10">
             {tab === "settings" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 w-full">
-                <button
-                  onClick={handleToggleAntiCheat}
-                  className={`w-full px-4 py-3 rounded-2xl font-bold shadow-md flex items-center justify-center gap-2 transition-all text-sm border ${isAntiCheatOn ? "bg-red-50 text-red-600 border-red-200" : "bg-blue-600 text-white border-blue-400"}`}
-                >
-                  <ShieldCheck size={18} />{" "}
-                  {isAntiCheatOn ? "Matikan Anti-Cheat" : "Hidupkan Anti-Cheat"}
-                </button>
-                <button
-                  onClick={handleToggleAppOnly}
-                  className={`w-full px-4 py-3 rounded-2xl font-bold shadow-md flex items-center justify-center gap-2 transition-all text-sm border ${isAppOnlyOn ? "bg-amber-50 text-amber-600 border-amber-200" : "bg-slate-800 text-white border-slate-700"}`}
-                >
-                  {isAppOnlyOn ? <Unlock size={18} /> : <Lock size={18} />}{" "}
-                  {isAppOnlyOn ? "Buka Akses Browser" : "Kunci Aplikasi"}
-                </button>
-                <button
-                  onClick={handleToggleDeleteAll}
-                  className={`w-full px-4 py-3 rounded-2xl font-bold shadow-md flex items-center justify-center gap-2 transition-all text-sm border ${!isDeleteAllOn ? "bg-slate-100 text-slate-500 border-slate-300" : "bg-rose-50 text-rose-600 border-rose-200"}`}
-                >
-                  <Trash2 size={18} />{" "}
-                  {isDeleteAllOn ? "Kunci Tombol Hapus" : "Buka Tombol Hapus"}
-                </button>
+              <div className="grid w-full max-w-3xl grid-cols-1 gap-2 xl:grid-cols-3">
+                <SettingToggle label="Mode ujian" description="Anti-cheat aktif" checked={isAntiCheatOn} onClick={handleToggleAntiCheat} icon={ShieldCheck} />
+                <SettingToggle label="Akses aplikasi" description="Batasi ke aplikasi ujian" checked={isAppOnlyOn} onClick={handleToggleAppOnly} icon={isAppOnlyOn ? Lock : Unlock} />
+                <SettingToggle label="Hapus semua soal" description="Izinkan guru menghapus massal" checked={isDeleteAllOn} onClick={handleToggleDeleteAll} icon={Trash2} />
+                <SettingToggle label="Timer ujian" description="Batasi durasi sesuai jadwal" checked={isTimerOn} onClick={handleToggleTimer} icon={Timer} />
               </div>
             )}
             <button
-              onClick={() => (window.location.href = "/ujian-dashboard")}
+              onClick={() => navigate("/ujian-dashboard")}
               className="w-full md:w-auto bg-indigo-600 text-white px-6 py-3.5 rounded-2xl font-bold shadow-xl shadow-indigo-500/30 flex items-center justify-center gap-2 hover:scale-105 active:scale-95 transition-all text-sm border border-indigo-400 z-10"
             >
               <MonitorSmartphone size={20} className="animate-pulse" /> Live
@@ -1327,8 +1167,8 @@ const AdminDashboard = () => {
           </div>
         </header>
 
-        <div className="hidden md:flex shrink-0 flex-col xl:flex-row gap-4">
-          <Card className="p-6 bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 shadow-xl min-w-[200px] shrink-0 rounded-[2rem] relative overflow-hidden flex flex-col justify-center">
+        <div className="hidden md:flex shrink-0 items-stretch gap-4">
+          <Card className="p-5 bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 shadow-xl w-[200px] shrink-0 rounded-[2rem] relative overflow-hidden flex flex-col justify-center">
             <div className="absolute top-0 right-0 p-4 opacity-10">
               <ShieldCheck size={56} className="text-emerald-400" />
             </div>
@@ -1341,228 +1181,25 @@ const AdminDashboard = () => {
               </p>
             </div>
           </Card>
-
-          <Card className="flex-1 p-3 bg-white border border-slate-200 shadow-sm w-full rounded-[2rem] box-border flex flex-col justify-center">
-            <div className="flex flex-col md:flex-row items-center gap-3 w-full px-2">
-              <div className="flex items-center gap-2 w-full md:flex-1 md:border-r border-slate-200 pr-4">
-                <Search className="text-slate-400 shrink-0" size={20} />
-                <input
-                  className="w-full bg-transparent border-none outline-none font-medium text-base text-slate-700 py-2"
-                  placeholder="Ketik pencarian..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-
-              <div className="flex flex-col md:flex-row items-start md:items-center gap-3 w-full md:w-auto min-w-0">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap items-center gap-3 w-full md:w-auto min-w-0">
-                  {currentConfig.columns
-                    .filter((c) => c.filterable)
-                    .map((col) => (
-                      <div key={col.key} className="w-full md:w-40">
-                        <PremiumSelect
-                          value={filters[col.key] || ""}
-                          onChange={(val) =>
-                            setFilters({ ...filters, [col.key]: val })
-                          }
-                          options={[
-                            { label: `Semua ${col.label}`, value: "" },
-                            ...getFilterOptions(col.key).map((opt) => ({
-                              label: opt,
-                              value: opt,
-                            })),
-                          ]}
-                          placeholder={`Filter ${col.label}`}
-                        />
-                      </div>
-                    ))}
-                </div>
-              </div>
-
-              <button
-                onClick={() => refreshCurrentTab(false)}
-                className="flex justify-center items-center gap-2 p-3.5 text-slate-500 bg-slate-50 border border-slate-200 hover:text-emerald-700 hover:bg-emerald-50 hover:border-emerald-200 rounded-xl transition-all shadow-sm"
-              >
-                <RefreshCw
-                  size={18}
-                  className={loading || isSyncing ? "animate-spin" : ""}
-                />
-              </button>
-            </div>
-          </Card>
+          <FiltersToolbar
+            search={search}
+            setSearch={setSearch}
+            filters={filters}
+            setFilters={setFilters}
+            currentConfig={currentConfig}
+            getFilterOptions={getFilterOptions}
+            refreshCurrentTab={refreshCurrentTab}
+            loading={loading}
+            isSyncing={isSyncing}
+          />
         </div>
 
-        <Card className="hidden md:flex flex-col flex-1 min-h-0 border border-slate-200 shadow-xl shadow-slate-200/40 bg-white rounded-[2rem] overflow-hidden relative">
-          <div className="flex-1 overflow-auto w-full relative custom-scrollbar">
-            <table className="w-full text-left text-sm whitespace-nowrap border-collapse min-w-max">
-              <thead className="sticky top-0 z-20 shadow-sm">
-                <tr>
-                  {currentConfig.columns.map((col, index) => {
-                    const isID = index === 0;
-                    const isName = index === 1;
-                    const stickyStyle = isID
-                      ? { position: "sticky", left: 0, zIndex: 30 }
-                      : isName
-                        ? { position: "sticky", left: "80px", zIndex: 30 }
-                        : {};
-                    return (
-                      <th
-                        key={col.key}
-                        style={stickyStyle}
-                        onClick={() => col.sortable && handleSort(col.key)}
-                        className={`px-6 py-5 bg-slate-50 border-b-2 border-slate-200 text-slate-500 font-bold text-xs uppercase tracking-wider ${col.sortable ? "cursor-pointer hover:bg-slate-100" : ""} ${isID ? "border-r w-[80px]" : ""} ${isName ? "border-r shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] w-[240px]" : ""}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={
-                              sortConfig.key === col.key
-                                ? "text-emerald-700 font-black"
-                                : ""
-                            }
-                          >
-                            {col.label}
-                          </span>
-                          {col.sortable && (
-                            <div className="flex items-center">
-                              {sortConfig.key === col.key ? (
-                                sortConfig.direction === "asc" ? (
-                                  <ChevronUp
-                                    size={14}
-                                    className="text-emerald-600 font-black"
-                                  />
-                                ) : (
-                                  <ChevronDown
-                                    size={14}
-                                    className="text-emerald-600 font-black"
-                                  />
-                                )
-                              ) : (
-                                <ArrowUpDown
-                                  size={12}
-                                  className="text-slate-400"
-                                />
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </th>
-                    );
-                  })}
-                  <th className="px-6 py-5 text-center bg-slate-50 border-b-2 border-slate-200 text-slate-500 font-bold text-xs uppercase tracking-wider w-[140px]">
-                    Aksi
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {loading && data.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={currentConfig.columns.length + 1}
-                      className="py-20 text-center text-slate-400 font-bold text-sm bg-white"
-                    >
-                      <RefreshCw
-                        className="animate-spin mx-auto text-emerald-500 mb-4"
-                        size={32}
-                      />{" "}
-                      Memuat Data...
-                    </td>
-                  </tr>
-                ) : processedData.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={currentConfig.columns.length + 1}
-                      className="py-20 text-center text-slate-400 font-semibold text-base bg-white"
-                    >
-                      Belum ada data. Klik "Tambah Data Baru".
-                    </td>
-                  </tr>
-                ) : (
-                  processedData.map((item) => (
-                    <tr
-                      key={item.id}
-                      className={`transition-colors group ${item.isNew ? "bg-amber-50 hover:bg-amber-100" : "bg-white hover:bg-slate-50"}`}
-                    >
-                      {currentConfig.columns.map((col, index) => {
-                        const isID = index === 0;
-                        const isName = index === 1;
-                        const stickyStyle = isID
-                          ? { position: "sticky", left: 0, zIndex: 10 }
-                          : isName
-                            ? { position: "sticky", left: "80px", zIndex: 10 }
-                            : {};
-                        return (
-                          <td
-                            key={col.key}
-                            style={stickyStyle}
-                            className={`px-4 py-3 font-semibold text-slate-700 ${isID ? "border-r border-slate-100 bg-inherit" : ""} ${isName ? "border-r border-slate-100 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.03)] bg-inherit" : ""}`}
-                          >
-                            <EditableCell
-                              item={item}
-                              column={
-                                col.key === "mapel" && tab === "jadwal"
-                                  ? {
-                                      ...col,
-                                      options: [
-                                        ...new Set(
-                                          allData.mapel
-                                            .map((m) => m.nama_mapel)
-                                            .filter(Boolean),
-                                        ),
-                                      ],
-                                    }
-                                  : col.isCombobox
-                                    ? {
-                                        ...col,
-                                        options: [
-                                          ...new Set([
-                                            ...col.options,
-                                            ...getFilterOptions(col.key),
-                                          ]),
-                                        ],
-                                      }
-                                    : col
-                              }
-                              onSave={handleSaveCell}
-                            />
-                          </td>
-                        );
-                      })}
-                      <td className="px-4 py-3 text-center whitespace-nowrap bg-inherit">
-                        <div className="flex justify-center items-center gap-2">
-                          {tab === "jadwal" && !item.isNew && (
-                            <button
-                              onClick={() => handleCopyBroadcast(item)}
-                              className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-600 rounded-lg hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
-                              title="Salin Broadcast WA (Jadwal & Token)"
-                            >
-                              <Share2 size={16} />
-                            </button>
-                          )}
-                          {!item.isNew && tab !== "settings" && (
-                            <button
-                              onClick={() => handleDuplicateRow(item)}
-                              className="p-2 bg-blue-50 border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-500 hover:text-white transition-all shadow-sm"
-                              title="Duplikat Data Ini (Clone)"
-                            >
-                              <Files size={16} />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => confirmDelete(item.id)}
-                            className="p-2 bg-red-50 border border-red-200 text-red-600 rounded-lg hover:bg-red-500 hover:text-white transition-all shadow-sm"
-                            title="Hapus Baris"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <React.Suspense fallback={<PageSkeleton label="Menyiapkan data admin" />}>
+          {tab === "siswa" && <TabSiswa {...tabProps} />}
+          {tab === "jadwal" && <TabJadwal {...tabProps} />}
+          {tab === "mapel" && <TabMapel {...tabProps} />}
+          {tab === "settings" && <TabSettings {...tabProps} />}
+        </React.Suspense>
 
         <AnimatePresence>
           {customAlert.isOpen && (

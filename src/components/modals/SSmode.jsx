@@ -1,4 +1,5 @@
 // src/components/modals/SSmode.jsx
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useRef, useMemo, useEffect } from "react";
 import { pdfjs, Document, Page } from "react-pdf";
 import ReactCrop from "react-image-crop";
@@ -326,7 +327,7 @@ const SSmode = ({
   const handlePasteKunci = (text) => {
     setAnswerKeyText(text);
     const parsed = {};
-    const regex = /(\d+)[\.\-\)]?\s*([A-Ea-e])/g;
+    const regex = /(\d+)[.)-]?\s*([A-Ea-e])/g;
     let match;
     while ((match = regex.exec(text)) !== null) {
       const num = parseInt(match[1], 10);
