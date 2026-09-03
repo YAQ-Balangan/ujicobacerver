@@ -16,6 +16,9 @@ import {
   Target,
   ChevronLeft,
   ChevronRight,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
   ClipboardPaste,
   RefreshCcw,
   BookOpen,
@@ -257,9 +260,17 @@ const SSmode = ({
   const [mapel, setMapel] = useState("");
   const [kelas, setKelas] = useState("");
   const [toastMsg, setToastMsg] = useState(false); // <--- STATE NOTIF DITAMBAHKAN DI SINI
+  const [zoom, setZoom] = useState(1);
 
   const containerRef = useRef(null);
   const fileInputRef = useRef(null);
+  const imageUrl = useMemo(
+    () => (file && file.type.startsWith("image/") ? URL.createObjectURL(file) : ""),
+    [file],
+  );
+  useEffect(() => () => {
+    if (imageUrl) URL.revokeObjectURL(imageUrl);
+  }, [imageUrl]);
 
   // Ukuran PDF Responsif
   const [pdfWidth, setPdfWidth] = useState(800);
@@ -286,6 +297,7 @@ const SSmode = ({
       setNumPages(null);
       setPageNumber(1);
       setCrop({ unit: "%", width: 80, height: 20, x: 8, y: 5 });
+      setZoom(1);
     }
   };
 
@@ -364,19 +376,25 @@ const SSmode = ({
     setIsUploading(true);
     try {
       const container = containerRef.current;
-      const pageCanvas = container?.querySelector(".react-pdf__Page canvas");
-      if (!pageCanvas) throw new Error("Gagal membaca PDF.");
+      const preview = container?.querySelector(".react-pdf__Page canvas, img");
+      if (!preview) throw new Error("Gagal membaca file.");
 
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
-      const sX = (completedCrop.x * pageCanvas.width) / 100;
-      const sY = (completedCrop.y * pageCanvas.height) / 100;
-      const sWidth = (completedCrop.width * pageCanvas.width) / 100;
-      const sHeight = (completedCrop.height * pageCanvas.height) / 100;
+      const sourceWidth = preview instanceof HTMLCanvasElement
+        ? preview.width
+        : preview.getBoundingClientRect().width;
+      const sourceHeight = preview instanceof HTMLCanvasElement
+        ? preview.height
+        : preview.getBoundingClientRect().height;
+      const sX = (completedCrop.x * sourceWidth) / 100;
+      const sY = (completedCrop.y * sourceHeight) / 100;
+      const sWidth = (completedCrop.width * sourceWidth) / 100;
+      const sHeight = (completedCrop.height * sourceHeight) / 100;
 
       canvas.width = sWidth;
       canvas.height = sHeight;
-      ctx.drawImage(pageCanvas, sX, sY, sWidth, sHeight, 0, 0, sWidth, sHeight);
+      ctx.drawImage(preview, sX, sY, sWidth, sHeight, 0, 0, sWidth, sHeight);
 
       const base64Image = canvas.toDataURL("image/webp", 0.9).split(",")[1];
       const formData = new FormData();
@@ -432,7 +450,7 @@ const SSmode = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-950 md:backdrop-blur-md md:p-[10mm] lg:p-[20mm] font-sans text-slate-200">
+    <div className="tadbira-modal-snap fixed inset-0 z-[999] flex items-center justify-center bg-slate-950 md:backdrop-blur-md md:p-[10mm] lg:p-[20mm] font-sans text-slate-200">
       {/* <--- UI NOTIFIKASI MELAYANG (TOAST) ---> */}
       {toastMsg && (
         <div className="absolute top-8 left-1/2 -translate-x-1/2 z-[1005] bg-gradient-to-r from-emerald-600 to-emerald-500 text-white px-6 py-3 rounded-full shadow-2xl shadow-emerald-900/50 flex items-center gap-2 animate-bounce border border-emerald-400">
@@ -463,7 +481,7 @@ const SSmode = ({
           <div className="flex items-center gap-2">
             <input
               type="file"
-              accept=".pdf"
+              accept=".pdf,image/*"
               className="hidden"
               ref={fileInputRef}
               onChange={handleFileChange}
@@ -485,7 +503,7 @@ const SSmode = ({
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+        <div className="tadbira-snap-body flex-1 flex flex-col md:flex-row overflow-hidden">
           {/* AREA PDF (Centered & Scrollable) */}
           <div className="flex-1 bg-slate-950 flex flex-col relative overflow-hidden border-b md:border-b-0 md:border-r border-slate-800">
             {!file ? (
@@ -498,7 +516,7 @@ const SSmode = ({
                     <UploadCloud size={48} className="text-emerald-500" />
                   </div>
                   <span className="font-black text-slate-300 uppercase tracking-widest text-sm">
-                    Upload PDF Bank Soal
+                    Upload PDF atau Gambar Soal
                   </span>
                   <span className="text-slate-500 text-xs mt-3 font-medium">
                     Klik untuk mencari file
@@ -518,21 +536,29 @@ const SSmode = ({
                       ref={containerRef}
                       className="bg-white shadow-2xl inline-block rounded-lg overflow-hidden border-8 border-white"
                     >
-                      <Document
-                        file={file}
-                        onLoadSuccess={({ numPages }) => {
-                          setNumPages(numPages);
-                          setPageNumber(1);
-                        }}
-                      >
-                        <Page
-                          pageNumber={pageNumber}
-                          width={pdfWidth}
-                          scale={2}
-                          renderTextLayer={false}
-                          renderAnnotationLayer={false}
+                      {file.type === "application/pdf" ? (
+                        <Document
+                          file={file}
+                          onLoadSuccess={({ numPages }) => {
+                            setNumPages(numPages);
+                            setPageNumber(1);
+                          }}
+                        >
+                          <Page
+                            pageNumber={pageNumber}
+                            width={pdfWidth * zoom}
+                            renderTextLayer={false}
+                            renderAnnotationLayer={false}
+                          />
+                        </Document>
+                      ) : (
+                        <img
+                          src={imageUrl}
+                          alt="Pratinjau sumber soal"
+                          style={{ width: `${pdfWidth * zoom}px`, maxWidth: "none", display: "block" }}
+                          draggable="false"
                         />
-                      </Document>
+                      )}
                     </div>
                   </ReactCrop>
                 </div>
@@ -549,6 +575,18 @@ const SSmode = ({
                   <div className="font-mono font-black text-emerald-400 tracking-tighter bg-emerald-500/5 px-5 py-2 rounded-2xl border border-emerald-500/20 text-xs md:text-sm">
                     HAL {pageNumber} / {numPages || "-"}
                   </div>
+                  <div className="flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-800 p-1">
+                    <button type="button" onClick={() => setZoom((value) => Math.max(0.5, Number((value - 0.1).toFixed(1))))} disabled={isUploading || zoom <= 0.5} className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-700 disabled:opacity-30" aria-label="Perkecil pratinjau">
+                      <ZoomOut size={15} />
+                    </button>
+                    <span className="min-w-12 text-center text-[10px] font-black text-slate-300">{Math.round(zoom * 100)}%</span>
+                    <button type="button" onClick={() => setZoom((value) => Math.min(2, Number((value + 0.1).toFixed(1))))} disabled={isUploading || zoom >= 2} className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-700 disabled:opacity-30" aria-label="Perbesar pratinjau">
+                      <ZoomIn size={15} />
+                    </button>
+                    <button type="button" onClick={() => setZoom(1)} disabled={isUploading || zoom === 1} className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-700 disabled:opacity-30" aria-label="Reset zoom">
+                      <RotateCcw size={14} />
+                    </button>
+                  </div>
                   <button
                     disabled={pageNumber >= numPages || isUploading}
                     onClick={() => changePage(1)}
@@ -563,7 +601,7 @@ const SSmode = ({
           </div>
 
           {/* PANEL KONTROL (Gaya Kartu M-Banking) */}
-          <div className="h-[45vh] md:h-full w-full md:w-[480px] lg:w-[580px] bg-slate-900 flex flex-col shrink-0 overflow-hidden relative shadow-[-10px_0_30px_rgba(0,0,0,0.2)]">
+          <div className="tadbira-snap-options h-[45vh] md:h-full w-full md:w-[480px] lg:w-[580px] bg-slate-900 flex flex-col shrink-0 overflow-hidden relative shadow-[-10px_0_30px_rgba(0,0,0,0.2)]">
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 scrollbar-none bg-slate-900/50">
               {/* CARD 1: STATUS & NOMOR (Atribut Utama) */}
               <div className="bg-slate-800/80 border border-slate-700 rounded-3xl p-4 shadow-xl flex items-center justify-between">

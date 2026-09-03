@@ -1110,16 +1110,16 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
           </div>
         </div>
 
-        <header className="hidden md:flex shrink-0 relative flex-col md:flex-row justify-between items-start md:items-center p-6 md:p-8 rounded-[2rem] shadow-sm border border-emerald-100/50 gap-4 overflow-hidden bg-gradient-to-br from-emerald-50 to-teal-100 z-0">
+        <header className="hidden md:flex shrink-0 relative flex-col items-stretch p-5 lg:p-6 rounded-[1.5rem] shadow-sm border border-emerald-100/50 gap-5 overflow-hidden bg-gradient-to-br from-emerald-50 to-teal-100 z-0">
           <div className="absolute -top-20 -left-10 w-72 h-72 bg-white/40 rounded-full -z-10 blur-xl"></div>
           <div className="absolute -bottom-20 right-10 w-80 h-80 bg-emerald-200/30 rounded-full -z-10 blur-xl"></div>
 
-          <div className="flex items-center gap-4 z-10">
-            <div className="p-4 bg-white/80 text-emerald-600 rounded-2xl shadow-sm border border-white/60">
-              <Settings size={28} className={isSyncing ? "animate-spin" : ""} />
+          <div className="flex items-center gap-3 z-10">
+            <div className="p-3 bg-white/80 text-emerald-600 rounded-xl shadow-sm border border-white/60">
+              <Settings size={24} className={isSyncing ? "animate-spin" : ""} />
             </div>
             <div>
-              <h2 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight drop-shadow-sm">
+              <h2 className="text-xl lg:text-2xl font-black text-slate-800 tracking-tight drop-shadow-sm">
                 {currentConfig.title}
               </h2>
               <div className="flex items-center gap-2 mt-1">
@@ -1134,36 +1134,37 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
               </div>
             </div>
           </div>
-          <div className="w-full md:w-auto flex flex-col md:flex-row gap-3 z-10">
+          <div className="w-full flex flex-col gap-4 z-10">
             {tab === "settings" && (
-              <div className="grid w-full max-w-3xl grid-cols-1 gap-2 xl:grid-cols-3">
+              <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <SettingToggle label="Mode ujian" description="Anti-cheat aktif" checked={isAntiCheatOn} onClick={handleToggleAntiCheat} icon={ShieldCheck} />
                 <SettingToggle label="Akses aplikasi" description="Batasi ke aplikasi ujian" checked={isAppOnlyOn} onClick={handleToggleAppOnly} icon={isAppOnlyOn ? Lock : Unlock} />
                 <SettingToggle label="Hapus semua soal" description="Izinkan guru menghapus massal" checked={isDeleteAllOn} onClick={handleToggleDeleteAll} icon={Trash2} />
                 <SettingToggle label="Timer ujian" description="Batasi durasi sesuai jadwal" checked={isTimerOn} onClick={handleToggleTimer} icon={Timer} />
               </div>
             )}
-            <button
-              onClick={() => navigate("/ujian-dashboard")}
-              className="w-full md:w-auto bg-indigo-600 text-white px-6 py-3.5 rounded-2xl font-bold shadow-xl shadow-indigo-500/30 flex items-center justify-center gap-2 hover:scale-105 active:scale-95 transition-all text-sm border border-indigo-400 z-10"
-            >
-              <MonitorSmartphone size={20} className="animate-pulse" /> Live
-              Ujian
-            </button>
-            {tab === "siswa" && (
+            <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={handleCetakKartu}
-                className="w-full md:w-auto bg-blue-600 text-white px-6 py-3.5 rounded-2xl font-bold shadow-xl shadow-blue-500/30 flex items-center justify-center gap-2 hover:scale-105 active:scale-95 transition-all text-sm border border-blue-400 z-10"
+                onClick={() => navigate("/ujian-dashboard")}
+                className="flex-1 min-w-[9rem] bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-indigo-500/30 flex items-center justify-center gap-2 hover:bg-indigo-700 active:scale-95 transition-all text-sm border border-indigo-400 z-10"
               >
-                <Printer size={20} /> Cetak Kartu Login
+                <MonitorSmartphone size={18} className="animate-pulse" /> Live Ujian
               </button>
-            )}
-            <button
-              onClick={handleAddNewRow}
-              className="w-full md:w-auto bg-gradient-to-r from-emerald-600 to-emerald-500 text-white px-6 py-3.5 rounded-2xl font-bold shadow-xl shadow-emerald-500/30 flex items-center justify-center gap-2 hover:scale-105 active:scale-95 transition-all text-sm border border-emerald-400 z-10"
-            >
-              <Plus size={20} /> Tambah Data Baru
-            </button>
+              {tab === "siswa" && (
+                <button
+                  onClick={handleCetakKartu}
+                  className="flex-1 min-w-[9rem] bg-blue-600 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-blue-500/30 flex items-center justify-center gap-2 hover:bg-blue-700 active:scale-95 transition-all text-sm border border-blue-400 z-10"
+                >
+                  <Printer size={18} /> Cetak Kartu Login
+                </button>
+              )}
+              <button
+                onClick={handleAddNewRow}
+                className="flex-1 min-w-[9rem] bg-gradient-to-r from-emerald-600 to-emerald-500 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-emerald-500/30 flex items-center justify-center gap-2 hover:from-emerald-700 hover:to-emerald-600 active:scale-95 transition-all text-sm border border-emerald-400 z-10"
+              >
+                <Plus size={18} /> Tambah Data Baru
+              </button>
+            </div>
           </div>
         </header>
 

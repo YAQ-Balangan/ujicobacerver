@@ -34,13 +34,13 @@ const Dashboard = ({
       )}
 
       <aside
-        className={`tadbira-sidebar fixed inset-y-0 left-0 z-50 w-[min(20rem,88vw)] bg-[#f8fbff] transition-transform duration-300 lg:translate-x-0 lg:static lg:sticky lg:top-0 flex flex-col h-screen border-r border-sky-100 shadow-[6px_0_18px_rgba(14,116,144,0.10)] ${
+        className={`tadbira-sidebar fixed inset-y-0 left-0 z-50 w-[min(18rem,88vw)] bg-[#f8fbff] transition-transform duration-300 lg:translate-x-0 lg:static lg:sticky lg:top-0 flex flex-col h-screen border-r border-sky-100 shadow-[6px_0_18px_rgba(14,116,144,0.10)] ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="px-6 sm:px-8 pt-6 sm:pt-8 pb-5">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 flex items-center justify-center shrink-0 rounded-2xl border border-sky-100 bg-white p-2 shadow-[0_8px_18px_rgba(14,116,144,0.12)]">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 flex items-center justify-center shrink-0 rounded-2xl border border-sky-100 bg-white p-2 shadow-[0_8px_18px_rgba(14,116,144,0.12)]">
               <img
                 src={logoMasda}
                 alt="Logo TADBIRA"
@@ -69,7 +69,7 @@ const Dashboard = ({
                     setActive(item.id);
                     setMobileOpen(false);
                   }}
-                  className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 text-sm outline-none border ${
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 text-sm outline-none border ${
                     isActive
                       ? "bg-gradient-to-r from-emerald-100 via-emerald-50 to-cyan-50 border-emerald-200 text-emerald-800 font-black shadow-[inset_0_2px_0_rgba(255,255,255,0.85),0_4px_12px_rgba(16,185,129,0.12)]"
                       : "bg-white/80 border-slate-200/80 text-slate-700 hover:text-sky-700 hover:border-sky-200 hover:bg-sky-50 font-bold shadow-[0_4px_12px_rgba(15,23,42,0.035)]"
