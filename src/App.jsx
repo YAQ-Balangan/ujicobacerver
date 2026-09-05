@@ -7,6 +7,8 @@ import { PageSkeleton } from "./components/ui/Ui";
 import {
   readOfflineQueue,
   writeOfflineQueue,
+  readOfflineSessionQueue,
+  writeOfflineSessionQueue,
   removeLegacyOfflineQueue,
 } from "./utils/offlineQueue";
 
@@ -88,9 +90,38 @@ const AppRouter = () => {
 
       try {
         if (Date.now() - lastStaleSessionCleanup >= 5 * 60 * 1000) {
-          await api.cleanupStaleSesi();
+          try {
+            await api.cleanupStaleSesi();
+          } catch (cleanupError) {
+            console.warn("Pembersihan sesi lama ditunda:", cleanupError.message);
+          }
           lastStaleSessionCleanup = Date.now();
         }
+        const sessionQueue = readOfflineSessionQueue();
+        const remainingSessions = [];
+        for (let index = 0; index < sessionQueue.length; index += 1) {
+          const session = sessionQueue[index];
+          try {
+            const syncResult = await api.saveSesi(
+              session.username_siswa,
+              session.id_ujian,
+              session.jawaban_sementara,
+              session.sisa_waktu,
+              Number(session.pelanggaran || 0),
+              session.status || "ACTIVE",
+            );
+            if (syncResult?.queued) {
+              remainingSessions.push(session, ...sessionQueue.slice(index + 1));
+              break;
+            }
+          } catch (errorSesi) {
+            console.error("Supabase menolak sesi offline:", errorSesi.message);
+            remainingSessions.push(session, ...sessionQueue.slice(index + 1));
+            break;
+          }
+        }
+        writeOfflineSessionQueue(remainingSessions);
+
         const username = user.Username || user.username;
         const queueData = readOfflineQueue(username);
         if (queueData.length === 0) return;

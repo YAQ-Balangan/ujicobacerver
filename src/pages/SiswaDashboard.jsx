@@ -39,6 +39,7 @@ import "katex/dist/katex.min.css";
 import renderMathInElement from "katex/contrib/auto-render";
 import {
   createStableSubmissionId,
+  enqueueOfflineSession,
   enqueueOfflineSubmission,
   readOfflineQueue,
   writeOfflineQueue,
@@ -261,6 +262,7 @@ const SiswaDashboard = () => {
   const [pelanggaran, setPelanggaran] = useState(0);
   const [isAntiCheatActive, setIsAntiCheatActive] = useState(true);
   const isAntiCheatActiveRef = useRef(true);
+  const fullscreenGuardRef = useRef(false);
 
   useEffect(() => {
     isAntiCheatActiveRef.current = isAntiCheatActive;
@@ -354,16 +356,23 @@ const SiswaDashboard = () => {
     const examId = exam ? getVal(exam, "ID") : "";
     if (!exam || !username || !examId || isSubmittingRef.current) return;
 
+    const existingStatus = JSON.parse(
+      localStorage.getItem(`status_ujian_${username}_${examId}`) || "{}",
+    );
+    const snapshot = {
+      answers,
+      sisaWaktu: timeLeft,
+      pelanggaran,
+      isLocked,
+      attempt: activeAttempt,
+      updatedAt: new Date().toISOString(),
+      lockStartedAt: isLocked
+        ? existingStatus.lockStartedAt || new Date().toISOString()
+        : undefined,
+    };
     localStorage.setItem(
       `status_ujian_${username}_${examId}`,
-      JSON.stringify({
-        answers,
-        sisaWaktu: timeLeft,
-        pelanggaran,
-        isLocked,
-        attempt: activeAttempt,
-        updatedAt: new Date().toISOString(),
-      }),
+      JSON.stringify(snapshot),
     );
   }, [activeExam, activeAttempt, answers, timeLeft, pelanggaran, isLocked, userUsername]);
   useEffect(() => {
@@ -654,12 +663,14 @@ const SiswaDashboard = () => {
 
       // --- KODE BARU: FUNGSI SIMPAN KE BRANKAS HP OFFLINE ---
       const simpanStatusOffline = (pelanggaranBaru, statusKunci) => {
+        const payload = {
+          pelanggaran: pelanggaranBaru,
+          isLocked: statusKunci,
+          lockStartedAt: statusKunci ? new Date().toISOString() : undefined,
+        };
         localStorage.setItem(
           `status_ujian_${username}_${examId}`,
-          JSON.stringify({
-            pelanggaran: pelanggaranBaru,
-            isLocked: statusKunci,
-          }),
+          JSON.stringify(payload),
         );
       };
       // ------------------------------------------------------
@@ -707,22 +718,29 @@ const SiswaDashboard = () => {
         setTimeout(() => {
           isProcessing = false;
         }, 2000);
-      } else if (currentPelanggaran >= 2) {
-        // TAHAP 3: DISKUALIFIKASI
-        pelanggaranRef.current = 3;
+      } else {
+        // TAHAP 3: KUNCI TANPA DISKUALIFIKASI
+        pelanggaranRef.current = Math.max(currentPelanggaran, 2);
         isLockedRef.current = true;
-        setPelanggaran(3);
-        simpanStatusOffline(3, true); // Amankan ke HP (Diskualifikasi)
+        setPelanggaran(2);
+        simpanStatusOffline(2, true);
 
         await api.saveSesi(
           username,
           examId,
           answersRef.current,
           timeLeftRef.current,
-          3,
-          "DISQUALIFIED",
+          2,
+          "LOCKED",
         );
-        executeEndExam(true, "Diskualifikasi");
+        showAlert(
+          "warning",
+          "Ujian Terkunci",
+          "Sistem mendeteksi aktivitas yang tidak valid. Silakan tunggu pengawas untuk membuka kunci. Ujian tidak dinyatakan diskualifikasi.",
+        );
+        setTimeout(() => {
+          isProcessing = false;
+        }, 2000);
       }
     };
 
@@ -769,11 +787,12 @@ const SiswaDashboard = () => {
     };
 
     const handleFullscreenChange = () => {
-      if (
-        !document.fullscreenElement &&
-        !document.webkitFullscreenElement &&
-        !document.msFullscreenElement
-      ) {
+      const isFullscreenActive =
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.msFullscreenElement;
+      if (!isFullscreenActive && fullscreenGuardRef.current) {
+        if (!activeExamRef.current || isSubmittingRef.current) return;
         console.log("Siswa keluar dari mode Fullscreen");
         triggerLock("Keluar dari Mode Fullscreen");
       }
@@ -886,7 +905,33 @@ const SiswaDashboard = () => {
       try {
         const examId = getVal(activeExam, "ID");
         const sesi = await api.getSesi(userUsername, examId);
-        if (cancelled || !sesi || sesi.status !== "ACTIVE") return;
+        if (cancelled || !sesi) return;
+
+        const localStatus = JSON.parse(
+          localStorage.getItem(`status_ujian_${userUsername}_${examId}`) || "{}",
+        );
+        const lockStartedAt = localStatus.lockStartedAt
+          ? new Date(localStatus.lockStartedAt).getTime()
+          : 0;
+        const serverUpdatedAt = sesi.updated_at
+          ? new Date(sesi.updated_at).getTime()
+          : 0;
+        const localLockExists = lockStartedAt > 0;
+        const serverIsFreshUnlock =
+          !localLockExists ||
+          serverUpdatedAt === 0 ||
+          serverUpdatedAt > lockStartedAt;
+
+        if (sesi.status !== "ACTIVE") return;
+        if (localLockExists && serverUpdatedAt > 0 && serverUpdatedAt <= lockStartedAt) {
+          return;
+        }
+        if (!serverIsFreshUnlock) {
+          return;
+        }
+        if (localLockExists && Number(sesi.pelanggaran || 0) >= 2) {
+          return;
+        }
 
         isLockedRef.current = false;
         setIsLocked(false);
@@ -899,6 +944,7 @@ const SiswaDashboard = () => {
             isLocked: false,
             attempt: activeAttempt,
             updatedAt: new Date().toISOString(),
+            lockStartedAt: undefined,
           }),
         );
         showAlert(
@@ -940,7 +986,16 @@ const SiswaDashboard = () => {
     const examId = getVal(exam, "ID");
     const examToken = getVal(exam, "Token");
     const examMapel = getVal(exam, "Mapel");
-    const examDurasi = parseInt(getVal(exam, "Durasi_Menit")) || 90;
+    const examDurasi =
+      Math.max(
+        1,
+        parseInt(
+          getVal(exam, "Durasi_Menit") ||
+            getVal(exam, "durasi_menit") ||
+            getVal(exam, "Durasi"),
+          10,
+        ) || 90,
+      );
 
     const inputToken = tokens[examId]?.toUpperCase() || "";
     const realToken = String(examToken || "").toUpperCase();
@@ -1137,7 +1192,13 @@ const SiswaDashboard = () => {
           finalAnswers = parsedJawaban;
         }
 
-        finalTimeLeft = serverSession.sisa_waktu || examDurasi * 60;
+        const savedTimeLeft = Number(serverSession.sisa_waktu);
+        finalTimeLeft =
+          serverSession.status === "ACTIVE" && savedTimeLeft <= 0
+            ? examDurasi * 60
+            : savedTimeLeft > 0
+              ? savedTimeLeft
+              : examDurasi * 60;
         setPelanggaran(serverSession.pelanggaran || 0);
         setIsLocked(serverSession.status === "LOCKED");
 
@@ -1153,12 +1214,18 @@ const SiswaDashboard = () => {
               (!serverSession.updated_at ||
                 new Date(localSnapshot.updatedAt).getTime() >
                   new Date(serverSession.updated_at).getTime());
+            const normalizedServerStatus =
+              serverSession.status === "DISQUALIFIED" ? "LOCKED" : serverSession.status;
             const localLockIsStronger =
               localSnapshot.isLocked === true &&
-              serverSession.status !== "DISQUALIFIED";
+              normalizedServerStatus !== "DISQUALIFIED";
             if (localIsNewer || localLockIsStronger) {
               if (localSnapshot.answers) finalAnswers = localSnapshot.answers;
-              if (Number.isFinite(Number(localSnapshot.sisaWaktu))) {
+              if (
+                Number.isFinite(Number(localSnapshot.sisaWaktu)) &&
+                (Number(localSnapshot.sisaWaktu) > 0 ||
+                  serverSession.status !== "ACTIVE")
+              ) {
                 finalTimeLeft = Math.max(0, Number(localSnapshot.sisaWaktu));
               }
               const effectivePelanggaran = Math.max(
@@ -1202,7 +1269,10 @@ const SiswaDashboard = () => {
           if (parsedStatus.answers && Object.keys(finalAnswers).length === 0) {
             finalAnswers = parsedStatus.answers;
           }
-          if (Number.isFinite(Number(parsedStatus.sisaWaktu))) {
+          if (
+            Number.isFinite(Number(parsedStatus.sisaWaktu)) &&
+            Number(parsedStatus.sisaWaktu) > 0
+          ) {
             finalTimeLeft = Math.max(0, Number(parsedStatus.sisaWaktu));
           }
 
@@ -1217,14 +1287,17 @@ const SiswaDashboard = () => {
         }
         // =============================================================
       }
+      timeLeftRef.current = finalTimeLeft;
       try {
         const sesiPelanggaran = serverSession
           ? Number(serverSession.pelanggaran || 0)
           : Number(pelanggaranRef.current || 0);
+        const normalizedServerStatus =
+          serverSession?.status === "DISQUALIFIED" ? "LOCKED" : serverSession?.status;
         const sesiStatus =
-          isLockedRef.current || serverSession?.status === "LOCKED"
+          isLockedRef.current || normalizedServerStatus === "LOCKED"
             ? "LOCKED"
-            : serverSession?.status || "ACTIVE";
+            : normalizedServerStatus || "ACTIVE";
         await api.saveSesi(
           getVal(user, "Username"),
           examId,
@@ -1237,6 +1310,13 @@ const SiswaDashboard = () => {
         console.error("Gagal sinkron awal sesi ujian:", e);
       }
 
+      fullscreenGuardRef.current = true;
+      const docElm = document.documentElement;
+      if (docElm.requestFullscreen) {
+        docElm.requestFullscreen().catch(() => {
+          fullscreenGuardRef.current = false;
+        });
+      }
       setAnswers(finalAnswers); // Sekarang jawaban lama murid sukses dimuat kembali ke layar!
       setTimeLeft(finalTimeLeft);
       setCurrentSoalIndex(0);
@@ -1357,6 +1437,7 @@ const SiswaDashboard = () => {
 
       // RESET STATE INTERFACE UJIAN & PINDAH KE TAB NILAI
       // setIsSubmitting(false);
+      fullscreenGuardRef.current = false;
       setActiveExam(null);
       setAnswers({});
       setRaguRagu({});
@@ -1386,13 +1467,7 @@ const SiswaDashboard = () => {
         console.warn("Gagal keluar dari fullscreen.");
       }
 
-      if (forcedStatus === "Diskualifikasi") {
-        showAlert(
-          "danger",
-          "Diskualifikasi!",
-          "Ujian Anda dihentikan paksa. Nilai Anda sedang diproses di latar belakang.",
-        );
-      } else if (isForced) {
+      if (isForced) {
         showAlert(
           "info",
           "Waktu Habis!",
@@ -1463,6 +1538,16 @@ const SiswaDashboard = () => {
           "Kunci terbuka di perangkat, tetapi status server belum tersinkron. Jangan tutup halaman sampai koneksi pulih.",
         );
       }
+    } else {
+      enqueueOfflineSession({
+        id_sesi: `${usernameSiswa}_${examId}`,
+        username_siswa: usernameSiswa,
+        id_ujian: examId,
+        jawaban_sementara: answersRef.current,
+        sisa_waktu: timeLeftRef.current,
+        pelanggaran: pelanggaranRef.current,
+        status: "ACTIVE",
+      });
     }
 
     try {

@@ -1,5 +1,6 @@
 // src/api/api.js
 import { createClient } from '@supabase/supabase-js';
+import { enqueueOfflineSession } from "../utils/offlineQueue";
 
 export const APP_NAME = "CBT-MASDA-2026";
 
@@ -19,6 +20,13 @@ const enqueueSessionWrite = (idSesi, operation) => {
     }));
     return next;
 };
+
+const isRetryableSessionError = (error) =>
+    !error?.code ||
+    error?.status === 0 ||
+    error?.status === 408 ||
+    error?.status === 429 ||
+    error?.status >= 500;
 
 const createSupabaseFallback = () => {
   const throwConfigError = () => {
@@ -234,30 +242,32 @@ export const api = {
     saveSesi: async (username, idUjian, jawaban, sisaWaktu, pelanggaran = 0, statusSesi = 'ACTIVE') => {
         const idSesi = `${username}_${idUjian}`;
         return enqueueSessionWrite(idSesi, async () => {
-          try {
-            const waktuSekarang = new Date().toISOString();
-            const jawabanString = typeof jawaban === 'string' ? jawaban : JSON.stringify(jawaban);
+          const payload = {
+              id_sesi: idSesi,
+              username_siswa: username,
+              id_ujian: idUjian,
+              jawaban_sementara: typeof jawaban === 'string' ? jawaban : JSON.stringify(jawaban),
+              sisa_waktu: sisaWaktu,
+              pelanggaran,
+              status: statusSesi,
+              updated_at: new Date().toISOString(),
+          };
 
-            // GANTI LOGIKA LAMA MENJADI JALUR TUNGGAL (UPSERT)
-            const payload = {
-                id_sesi: idSesi,
-                username_siswa: username,
-                id_ujian: idUjian,
-                jawaban_sementara: jawabanString,
-                sisa_waktu: sisaWaktu,
-                pelanggaran: pelanggaran,
-                status: statusSesi,
-                updated_at: waktuSekarang
-            };
-
-            const { error } = await supabase
-                .from('sesi_ujian')
-                .upsert(payload, { onConflict: 'id_sesi' });
-
-            if (error) throw new Error(error.message);
-          } catch (error) {
-              console.error("Gagal save sesi ujian:", error);
+          if (!navigator.onLine) {
+              enqueueOfflineSession(payload);
+              return { queued: true };
           }
+
+          const { error } = await supabase
+              .from('sesi_ujian')
+              .upsert(payload, { onConflict: 'id_sesi' });
+
+          if (!error) return { queued: false };
+          if (!isRetryableSessionError(error)) throw new Error(error.message);
+
+          console.warn("Sesi ujian belum tersinkron, masuk antrean offline:", error.message);
+          enqueueOfflineSession(payload);
+          return { queued: true };
         });
     },
 

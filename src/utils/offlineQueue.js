@@ -1,4 +1,5 @@
 const LEGACY_QUEUE_KEY = "tadbira_offline_nilai";
+const OFFLINE_SESSION_QUEUE_KEY = "tadbira_offline_sesi";
 
 export const getOfflineQueueKey = (username) =>
   `tadbira_offline_nilai_${encodeURIComponent(String(username || "anonymous"))}`;
@@ -37,6 +38,24 @@ export const readOfflineQueue = (username) => {
 
 export const writeOfflineQueue = (username, queue) => {
   localStorage.setItem(getOfflineQueueKey(username), JSON.stringify(queue));
+};
+
+export const readOfflineSessionQueue = () =>
+  parseQueue(localStorage.getItem(OFFLINE_SESSION_QUEUE_KEY));
+
+export const writeOfflineSessionQueue = (queue) => {
+  localStorage.setItem(OFFLINE_SESSION_QUEUE_KEY, JSON.stringify(queue));
+};
+
+export const enqueueOfflineSession = (session) => {
+  const queue = readOfflineSessionQueue();
+  const sessionId = session.id_sesi;
+  const nextQueue = [
+    ...queue.filter((item) => item.id_sesi !== sessionId),
+    { ...session, queued_at: session.queued_at || new Date().toISOString() },
+  ];
+  writeOfflineSessionQueue(nextQueue);
+  return nextQueue;
 };
 
 export const enqueueOfflineSubmission = (username, submission) => {
