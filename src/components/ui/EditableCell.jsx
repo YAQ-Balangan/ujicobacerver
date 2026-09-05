@@ -146,7 +146,7 @@ const EditableCell = ({ item, column, onSave }) => {
   return (
     <div
       onClick={() => setIsEditing(true)}
-      className={`w-full min-h-[28px] cursor-text hover:bg-emerald-50 hover:ring-1 hover:ring-emerald-200 rounded px-1.5 flex items-center transition-colors ${column.key === "id" ? "font-mono text-xs text-slate-500 bg-slate-100 border border-slate-200 hover:border-emerald-300 w-max" : "text-slate-700"}`}
+      className={`w-full min-h-[28px] min-w-0 cursor-text hover:bg-emerald-50 hover:ring-1 hover:ring-emerald-200 rounded px-1.5 flex items-center transition-colors ${column.key === "id" ? "font-mono text-xs text-slate-500 bg-slate-100 border border-slate-200 hover:border-emerald-300 w-max" : "text-slate-700 break-words whitespace-normal overflow-hidden"}`}
       title="Klik untuk mengubah"
     >
       {column.key === "role" || column.key === "status" ? (

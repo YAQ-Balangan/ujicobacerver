@@ -3,7 +3,7 @@ import React, { useState, useContext, useEffect } from "react";
 import { LogOut, Menu } from "lucide-react";
 import { AuthContext } from "../../context/AuthContext";
 import { Badge } from "../ui/Ui";
-import logoMasda from "../../assets/logo.svg";
+import logoMasda from "../../assets/logo.webp";
 
 const Dashboard = ({
   children,
@@ -90,8 +90,8 @@ const Dashboard = ({
 
         <div className="p-4 sm:p-6 space-y-3 bg-[#f8fbff] shrink-0 border-t border-sky-100">
           <div className="flex items-center gap-3 p-3.5 bg-white rounded-2xl border border-slate-200 shadow-[0_6px_16px_rgba(15,23,42,0.05)]">
-            <div className="w-11 h-11 bg-emerald-100 rounded-xl flex items-center justify-center font-black text-emerald-700 border border-emerald-200">
-              {user?.nama?.[0] || "U"}
+            <div className="w-11 h-11 bg-emerald-100 rounded-xl overflow-hidden flex items-center justify-center font-black text-emerald-700 border border-emerald-200">
+              {user?.foto_profil ? <img src={user.foto_profil} alt="Foto profil" className="w-full h-full object-cover" style={{ objectPosition: user.foto_posisi || "50% 50%" }} /> : (user?.nama?.[0] || "U")}
             </div>
             <div className="overflow-hidden">
               <p className="text-sm font-black text-slate-800 truncate">

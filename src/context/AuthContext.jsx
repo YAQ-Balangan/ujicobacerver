@@ -31,9 +31,14 @@ export const AuthProvider = ({ children }) => {
     sessionStorage.removeItem(`${APP_NAME}_session`);
   };
 
+  const updateUserAction = (nextUser) => {
+    setUser(nextUser);
+    sessionStorage.setItem(`${APP_NAME}_session`, JSON.stringify(nextUser));
+  };
+
   return (
     <AuthContext.Provider
-      value={{ user, login: loginAction, logout: logoutAction, loading }}
+      value={{ user, login: loginAction, logout: logoutAction, updateUser: updateUserAction, loading }}
     >
       {!loading && children}
     </AuthContext.Provider>

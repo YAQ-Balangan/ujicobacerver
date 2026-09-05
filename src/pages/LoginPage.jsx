@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { AuthContext } from "../context/AuthContext";
 import { isSupabaseReady } from "../api/api";
-import logoTADBIRA from "../assets/logo.svg";
+import logoTADBIRA from "../assets/logo.webp";
 
 const LoginPage = () => {
   const { login } = useContext(AuthContext);
@@ -38,9 +38,9 @@ const LoginPage = () => {
 
   return (
     // Padding luar diperkecil menjadi p-2 agar menyesuaikan margin
-    <div className="bg-slate-100 flex items-center justify-center p-2 font-sans w-full min-h-screen">
+    <div className="login-page bg-slate-100 flex items-center justify-center p-2 font-sans w-full min-h-screen">
       {/* FORM CARD - Diperkecil (max-w-[320px]), margin m-2 sekeliling, dan padding p-6 */}
-      <div className="w-full max-w-[320px] m-2 bg-slate-100 p-6 rounded-[2rem] shadow-[10px_10px_20px_#cbd5e1,-10px_-10px_20px_#ffffff] relative z-10 transition-all duration-300">
+      <div className="login-card w-full max-w-[320px] m-2 bg-slate-100 p-6 rounded-[2rem] shadow-[10px_10px_20px_#cbd5e1,-10px_-10px_20px_#ffffff] relative z-10 transition-all duration-300">
         {/* LOGO & JUDUL - Diperkecil ukurannya */}
         <div className="flex flex-col items-center mb-6 text-center">
           <div className="w-16 h-16 flex items-center justify-center mb-4 rounded-2xl shadow-[4px_4px_8px_#cbd5e1,-4px_-4px_8px_#ffffff] bg-slate-100 p-2.5">

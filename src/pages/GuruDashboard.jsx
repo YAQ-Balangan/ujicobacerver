@@ -479,6 +479,8 @@ const GuruDashboard = () => {
   const [nilaiViewMode, setNilaiViewMode] = useState("rekap");
   const [nilaiPage, setNilaiPage] = useState(1);
   const nilaiPageSize = 25;
+  const [editingNilaiCell, setEditingNilaiCell] = useState(null);
+  const [editingNilaiValue, setEditingNilaiValue] = useState("");
 
   const showAlert = (type, title, message, onConfirm = null) => {
     setCustomAlert({ isOpen: true, type, title, message, onConfirm });
@@ -570,6 +572,38 @@ const GuruDashboard = () => {
       showAlert("danger", "Redo Gagal", "Gagal mengulang aksi: " + err.message);
     } finally {
       setIsDoingHistory(false);
+    }
+  };
+
+  const handleSaveNilai = async (item, mapel) => {
+    const sourceId = item[`${mapel}__id`];
+    const nextScore = Number(String(editingNilaiValue).replace(",", "."));
+    if (sourceId === undefined || !Number.isFinite(nextScore) || nextScore < 0) {
+      showAlert("warning", "Nilai Tidak Valid", "Masukkan nilai angka nol atau lebih.");
+      return;
+    }
+
+    const sourceItem = data.find((row) => String(row.id) === String(sourceId));
+    if (!sourceItem || Number(sourceItem.skor) === nextScore) {
+      setEditingNilaiCell(null);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const updatedItem = { ...sourceItem, skor: nextScore };
+      await api.update("Nilai", sourceId, { skor: nextScore });
+      setData((prev) =>
+        prev.map((row) =>
+          String(row.id) === String(sourceId) ? updatedItem : row,
+        ),
+      );
+      pushAction({ type: "UPDATE", oldItem: sourceItem, newItem: updatedItem });
+      setEditingNilaiCell(null);
+    } catch (error) {
+      showAlert("danger", "Gagal Mengubah Nilai", error.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -1869,8 +1903,10 @@ Patuhi aturan berikut secara ketat:
       const mapelKey = row.mapel;
       if (!grouped[key])
         grouped[key] = { nama_siswa: row.nama_siswa, kelas: row.kelas };
-      if (grouped[key][mapelKey] === undefined)
+      if (grouped[key][mapelKey] === undefined) {
         grouped[key][mapelKey] = parseFloat(row.skor) || 0;
+        grouped[key][`${mapelKey}__id`] = row.id;
+      }
     });
 
     let filteredMapels = mapels;
@@ -2249,7 +2285,7 @@ Patuhi aturan berikut secara ketat:
 
   return (
     <Dashboard menu={MENU_ITEMS} active={tab} setActive={setTab}>
-      <div className="space-y-6 max-w-7xl mx-auto pb-24 relative">
+      <div className="guru-dashboard space-y-5 max-w-7xl mx-auto pb-24 relative">
         {lockedSessions.length > 0 && (
           <div className="fixed bottom-4 md:bottom-8 right-4 md:right-8 z-[45] max-w-[calc(100vw-2rem)] md:max-w-sm">
             <div className="bg-gradient-to-r from-red-600 to-red-500 text-white p-3 md:p-4 rounded-[1.5rem] shadow-2xl shadow-red-500/30 flex items-center gap-3 md:gap-4 border border-red-400">
@@ -2278,34 +2314,34 @@ Patuhi aturan berikut secara ketat:
           </div>
         )}
 
-        <div className="md:hidden space-y-4 mb-2">
-          <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-3xl p-5 text-white shadow-lg shadow-emerald-600/30 relative overflow-hidden">
+        <div className="md:hidden space-y-3 mb-2">
+        <div className="guru-mobile-welcome bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-2xl p-3.5 text-white shadow-lg shadow-emerald-600/30 relative overflow-hidden">
             <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-            <div className="flex justify-between items-center relative z-10 mb-6">
+            <div className="flex justify-between items-center relative z-10 mb-3">
               <div>
                 <p className="text-[10px] uppercase tracking-widest opacity-80 font-bold mb-0.5">
                   Selamat Datang,
                 </p>
-                <h2 className="text-xl font-black leading-tight">
+                <h2 className="text-lg font-black leading-tight">
                   {namaGuruLog}
                 </h2>
               </div>
-              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/20">
-                <Target size={20} className="text-white" />
+              <div className="w-9 h-9 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/20">
+                <Target size={18} className="text-white" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3 relative z-10">
-              <div className="bg-black/20 rounded-2xl p-3 backdrop-blur-sm border border-white/10">
+            <div className="grid grid-cols-2 gap-2 relative z-10">
+              <div className="bg-black/20 rounded-xl p-2.5 backdrop-blur-sm border border-white/10">
                 <p className="text-[10px] uppercase tracking-widest opacity-80 font-bold mb-1">
                   {tab === "soal" ? "Total Bank Soal" : "Siswa Sudah Ujian"}
                 </p>
-                <p className="text-2xl font-black">
+                <p className="text-xl font-black">
                   {tab === "soal"
                     ? indikatorTotalSoal
                     : pivotNilaiData?.data?.length || 0}
                 </p>
               </div>
-              <div className="bg-black/20 rounded-2xl p-3 backdrop-blur-sm border border-white/10">
+              <div className="bg-black/20 rounded-xl p-2.5 backdrop-blur-sm border border-white/10">
                 <p className="text-[10px] uppercase tracking-widest opacity-80 font-bold mb-1">
                   {tab === "soal"
                     ? "Direktori Folder"
@@ -2315,7 +2351,7 @@ Patuhi aturan berikut secara ketat:
                         ? "Log Riwayat"
                         : "Siswa Terkunci"}
                 </p>
-                <p className="text-2xl font-black">
+                <p className="text-xl font-black">
                   {tab === "soal"
                     ? folderSoal.length
                     : nilaiViewMode === "rekap"
@@ -2328,11 +2364,11 @@ Patuhi aturan berikut secara ketat:
             </div>
           </div>
 
-          <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">
+          <div className="guru-mobile-menu bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
+            <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2">
               Menu
             </h3>
-            <div className="grid grid-cols-4 gap-y-6 gap-x-2">
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 snap-x scrollbar-thin">
               <button
                 onClick={() => (window.location.href = "/ujian-dashboard")}
                 className="flex flex-col items-center gap-2 active:scale-95 transition-transform"
@@ -2596,10 +2632,10 @@ Patuhi aturan berikut secara ketat:
           </div>
         </div>
 
-        <header className="hidden md:flex relative flex-col md:flex-row justify-between items-start md:items-center p-6 md:p-8 rounded-[2rem] shadow-sm border border-emerald-200 gap-4 overflow-hidden bg-emerald-50 z-0">
+        <header className="guru-desktop-header hidden md:flex relative flex-col md:flex-row justify-between items-start md:items-center p-4 md:p-5 rounded-2xl shadow-sm border border-emerald-200 gap-3 overflow-hidden bg-emerald-50 z-0">
           <div className="w-full md:w-auto text-center md:text-left">
             <div className="flex flex-col md:flex-row items-center gap-2 md:gap-3">
-              <h2 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">
+              <h2 className="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">
                 {currentConfig.title}
               </h2>
               {isSyncing && (
@@ -2608,19 +2644,19 @@ Patuhi aturan berikut secara ketat:
                 </span>
               )}
             </div>
-            <p className="text-slate-600 font-medium text-sm mt-1">
+            <p className="text-slate-600 font-medium text-xs md:text-sm mt-1">
               {currentConfig.subtitle}
             </p>
           </div>
 
           <div className="flex flex-wrap w-full md:w-auto gap-2 z-10">
             {tab === "soal" && (
-              <div className="flex flex-wrap md:flex-nowrap gap-2 w-full md:w-auto items-center">
-                <div className="flex bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden w-full md:w-auto justify-center">
+              <div className="guru-question-actions flex flex-wrap md:flex-nowrap gap-2 w-full md:w-auto items-center">
+                <div className="guru-history-actions flex bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden w-full md:w-auto justify-center">
                   <button
                     onClick={handleUndo}
                     disabled={isDoingHistory || actionHistory.undo.length === 0}
-                    className="p-3 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-30 disabled:hover:bg-white transition-all border-r border-slate-100"
+                    className="guru-history-button p-3 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-30 disabled:hover:bg-white transition-all border-r border-slate-100"
                     title="Undo (Batal Aksi Terakhir)"
                   >
                     {isDoingHistory ? (
@@ -2628,11 +2664,12 @@ Patuhi aturan berikut secara ketat:
                     ) : (
                       <Undo size={18} />
                     )}
+                    <span className="guru-history-label">Undo</span>
                   </button>
                   <button
                     onClick={handleRedo}
                     disabled={isDoingHistory || actionHistory.redo.length === 0}
-                    className="p-3 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-30 disabled:hover:bg-white transition-all"
+                    className="guru-history-button p-3 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-30 disabled:hover:bg-white transition-all"
                     title="Redo (Ulangi Aksi)"
                   >
                     {isDoingHistory ? (
@@ -2640,6 +2677,7 @@ Patuhi aturan berikut secara ketat:
                     ) : (
                       <Redo size={18} />
                     )}
+                    <span className="guru-history-label">Redo</span>
                   </button>
                 </div>
 
@@ -2652,25 +2690,25 @@ Patuhi aturan berikut secara ketat:
                     setParsedBulkData([]);
                     setIsBulkOpen(true);
                   }}
-                  className="flex-1 md:flex-none bg-white text-emerald-700 border border-emerald-200 px-5 py-3 rounded-xl font-bold shadow-sm flex items-center justify-center gap-2 hover:bg-emerald-50 active:scale-95 transition-all text-sm"
+                  className="guru-action-button flex-1 md:flex-none bg-white text-emerald-700 border border-emerald-200 px-5 py-3 rounded-xl font-bold shadow-sm flex items-center justify-center gap-2 hover:bg-emerald-50 active:scale-95 transition-all text-sm"
                 >
                   <FileText size={18} /> Import Soal (Otomatis)
                 </button>
                 <button
                   onClick={() => setIsDummyModalOpen(true)}
-                  className="flex-1 md:flex-none bg-blue-50 text-blue-600 border border-blue-200 px-5 py-3 rounded-xl font-bold shadow-sm flex items-center justify-center gap-2 hover:bg-blue-100 active:scale-95 transition-all text-sm"
+                  className="guru-action-button flex-1 md:flex-none bg-blue-50 text-blue-600 border border-blue-200 px-5 py-3 rounded-xl font-bold shadow-sm flex items-center justify-center gap-2 hover:bg-blue-100 active:scale-95 transition-all text-sm"
                 >
                   <Layers size={18} /> Template Soal (Kosong)
                 </button>
                 <button
                   onClick={() => setIsSSModeOpen(true)}
-                  className="flex-1 md:flex-none bg-amber-50 text-amber-700 border border-amber-200 px-5 py-3 rounded-xl font-bold shadow-sm flex items-center justify-center gap-2 hover:bg-amber-100 active:scale-95 transition-all text-sm"
+                  className="guru-action-button flex-1 md:flex-none bg-amber-50 text-amber-700 border border-amber-200 px-5 py-3 rounded-xl font-bold shadow-sm flex items-center justify-center gap-2 hover:bg-amber-100 active:scale-95 transition-all text-sm"
                 >
                   <ScanSearch size={18} /> Snap Soal
                 </button>
                 <button
                   onClick={openAddModal}
-                  className="flex-1 md:flex-none bg-gradient-to-r from-emerald-600 to-emerald-500 text-white px-5 py-3 rounded-xl font-bold shadow-md shadow-emerald-500/30 flex items-center justify-center gap-2 hover:scale-105 active:scale-95 transition-all text-sm border border-emerald-400"
+                  className="guru-action-button flex-1 md:flex-none bg-gradient-to-r from-emerald-600 to-emerald-500 text-white px-5 py-3 rounded-xl font-bold shadow-md shadow-emerald-500/30 flex items-center justify-center gap-2 hover:scale-105 active:scale-95 transition-all text-sm border border-emerald-400"
                 >
                   <Plus size={18} /> Soal Manual
                 </button>
@@ -2748,10 +2786,28 @@ Patuhi aturan berikut secara ketat:
                 <MonitorSmartphone size={16} /> Live Ujian{" "}
               </button>
             </div>
+            <div className="flex items-center gap-2 mb-4 md:mb-6">
+              <button
+                type="button"
+                onClick={handleUndo}
+                disabled={isDoingHistory || actionHistory.undo.length === 0}
+                className="guru-nilai-history-button flex-1 md:flex-none"
+              >
+                <Undo size={15} /> Undo
+              </button>
+              <button
+                type="button"
+                onClick={handleRedo}
+                disabled={isDoingHistory || actionHistory.redo.length === 0}
+                className="guru-nilai-history-button flex-1 md:flex-none"
+              >
+                <Redo size={15} /> Redo
+              </button>
+            </div>
 
             {nilaiViewMode === "rekap" && statsNilai && (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                <Card className="p-5 md:p-6 border-none shadow-sm bg-gradient-to-br from-emerald-600 to-emerald-500 text-white rounded-[1.5rem] flex flex-col justify-center items-center sm:items-start">
+                <Card className="p-4 border-none shadow-sm bg-gradient-to-br from-emerald-600 to-emerald-500 text-white rounded-2xl flex flex-col justify-center items-center sm:items-start">
                   <p className="text-[11px] font-bold uppercase tracking-widest opacity-80 mb-2">
                     Rata-Rata Umum
                   </p>
@@ -2759,7 +2815,7 @@ Patuhi aturan berikut secara ketat:
                     {statsNilai.rataRata}
                   </div>
                 </Card>
-                <Card className="p-5 md:p-6 border border-emerald-100 shadow-sm bg-emerald-50 rounded-[1.5rem] flex flex-col justify-center items-center sm:items-start">
+                <Card className="p-4 border border-emerald-100 shadow-sm bg-emerald-50 rounded-2xl flex flex-col justify-center items-center sm:items-start">
                   <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-600/80 mb-2">
                     Nilai Tertinggi
                   </p>
@@ -2767,7 +2823,7 @@ Patuhi aturan berikut secara ketat:
                     {statsNilai.tertinggi}
                   </div>
                 </Card>
-                <Card className="p-5 md:p-6 border border-rose-100 shadow-sm bg-rose-50 rounded-[1.5rem] flex flex-col justify-center items-center sm:items-start">
+                <Card className="p-4 border border-rose-100 shadow-sm bg-rose-50 rounded-2xl flex flex-col justify-center items-center sm:items-start">
                   <p className="text-[11px] font-bold uppercase tracking-widest text-rose-600/80 mb-2 flex items-center gap-1">
                     Siswa Remedial{" "}
                     <span className="lowercase font-medium tracking-normal text-rose-500">
@@ -2786,7 +2842,7 @@ Patuhi aturan berikut secara ketat:
 
         {!(tab === "nilai" && nilaiViewMode === "pelanggaran") && (
           <div className="hidden md:flex flex-col xl:flex-row gap-4">
-            <Card className="p-6 bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 shadow-xl min-w-[200px] shrink-0 rounded-[2rem] relative overflow-hidden flex flex-col justify-center">
+            <Card className="p-4 bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 shadow-xl min-w-[180px] shrink-0 rounded-2xl relative overflow-hidden flex flex-col justify-center">
               <div className="absolute top-0 right-0 p-4 opacity-10">
                 <Award size={56} className="text-amber-400" />
               </div>
@@ -2814,54 +2870,62 @@ Patuhi aturan berikut secara ketat:
               </div>
             </Card>
 
-            <Card className="flex-1 p-3 bg-white border border-slate-200 shadow-sm w-full rounded-[2rem] box-border flex flex-col justify-center">
-              <div className="flex flex-col md:flex-row items-start md:items-center gap-3 w-full min-w-0 px-2 py-2">
-                {tab === "soal" && processedData.length > 0 && (
-                  <div className="flex gap-2 w-full md:w-auto shrink-0">
-                    <button
-                      onClick={handleSelectAll}
-                      className={`flex-1 md:flex-none flex justify-center items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all border ${isAllSelected ? "bg-emerald-50 border-emerald-200 text-emerald-700 shadow-inner" : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"}`}
-                    >
-                      {isAllSelected ? (
-                        <CheckSquare size={16} />
-                      ) : (
-                        <ListChecks size={16} />
-                      )}{" "}
-                      {isAllSelected ? "Batal Pilih" : "Pilih Semua"}
-                    </button>
-                    <button
-                      onClick={handleDeleteAll}
-                      disabled={isDeletingBulk || !isDeleteAllAllowed}
-                      className={`flex-1 md:flex-none flex justify-center items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all border ${!isDeleteAllAllowed ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed" : "bg-red-50 border-red-200 text-red-600 hover:bg-red-500 hover:text-white disabled:opacity-50"}`}
-                      title={
-                        !isDeleteAllAllowed
-                          ? "Fitur dinonaktifkan oleh Admin"
-                          : "Hapus seluruh data yang tampil di tabel ini"
-                      }
-                    >
-                      <Trash2 size={16} />{" "}
-                      {isDeleteAllAllowed
-                        ? "Hapus Semua Soal"
-                        : "Hapus Terkunci"}
-                    </button>
-                  </div>
-                )}
+            <Card className="guru-filter-card flex-1 p-2 bg-white border border-slate-200 shadow-sm w-full rounded-2xl box-border flex flex-col justify-center">
+              <div className="guru-filter-row flex flex-col md:flex-row items-start md:items-center gap-3 w-full min-w-0 px-2 py-2">
+                <div
+                  className={`guru-filter-main-row flex items-center gap-3 min-w-0 ${
+                    tab === "soal" && processedData.length > 0
+                      ? "has-actions"
+                      : ""
+                  }`}
+                >
+                  {tab === "soal" && processedData.length > 0 && (
+                    <div className="guru-filter-actions flex gap-2 w-full md:w-auto shrink-0">
+                      <button
+                        onClick={handleSelectAll}
+                        className={`flex-1 md:flex-none flex justify-center items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all border ${isAllSelected ? "bg-emerald-50 border-emerald-200 text-emerald-700 shadow-inner" : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"}`}
+                      >
+                        {isAllSelected ? (
+                          <CheckSquare size={16} />
+                        ) : (
+                          <ListChecks size={16} />
+                        )}{" "}
+                        {isAllSelected ? "Batal Pilih" : "Pilih Semua"}
+                      </button>
+                      <button
+                        onClick={handleDeleteAll}
+                        disabled={isDeletingBulk || !isDeleteAllAllowed}
+                        className={`flex-1 md:flex-none flex justify-center items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all border ${!isDeleteAllAllowed ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed" : "bg-red-50 border-red-200 text-red-600 hover:bg-red-500 hover:text-white disabled:opacity-50"}`}
+                        title={
+                          !isDeleteAllAllowed
+                            ? "Fitur dinonaktifkan oleh Admin"
+                            : "Hapus seluruh data yang tampil di tabel ini"
+                        }
+                      >
+                        <Trash2 size={16} />{" "}
+                        {isDeleteAllAllowed
+                          ? "Hapus Semua Soal"
+                          : "Hapus Terkunci"}
+                      </button>
+                    </div>
+                  )}
 
-                <div className="flex items-center gap-2 w-full md:flex-1 md:border-l md:border-r border-slate-200 px-0 md:px-4">
-                  <Search className="text-slate-400 shrink-0" size={20} />
-                  <input
-                    className="w-full bg-transparent border-none outline-none font-medium text-base text-slate-700 placeholder:text-slate-400 min-w-0 py-2"
-                    placeholder={`Cari di ${tab === "soal" ? "soal" : "siswa"}...`}
-                    value={search}
-                    onChange={(e) => {
-                      setSearch(e.target.value);
-                      if (tab === "soal") setSoalViewMode("list");
-                    }}
-                  />
+                  <div className="guru-filter-search flex items-center gap-2 w-full md:flex-1 md:border-l md:border-r border-slate-200 px-0 md:px-4">
+                    <Search className="text-slate-400 shrink-0" size={20} />
+                    <input
+                      className="w-full bg-transparent border-none outline-none font-medium text-base text-slate-700 placeholder:text-slate-400 min-w-0 py-2"
+                      placeholder={`Cari di ${tab === "soal" ? "soal" : "siswa"}...`}
+                      value={search}
+                      onChange={(e) => {
+                        setSearch(e.target.value);
+                        if (tab === "soal") setSoalViewMode("list");
+                      }}
+                    />
+                  </div>
                 </div>
 
-                <div className="flex flex-col md:flex-row items-start md:items-center gap-3 w-full md:w-auto min-w-0">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap items-center gap-2 w-full md:w-auto min-w-0">
+                <div className="guru-filter-options-row flex flex-col md:flex-row items-start md:items-center gap-3 w-full md:w-auto min-w-0">
+                  <div className="guru-filter-options grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap items-center gap-2 w-full md:w-auto min-w-0">
                     {currentConfig.filterKeys.map((key) => {
                       return (
                         <div key={key} className="w-full md:w-40">
@@ -3218,7 +3282,36 @@ Patuhi aturan berikut secara ketat:
                                     key={m}
                                     className={`px-6 py-4 text-center font-bold text-base border-l border-slate-100 ${isKkmFailed ? "text-rose-500 bg-rose-50/50" : "text-slate-600"}`}
                                   >
-                                    {skor !== undefined ? skor : "-"}
+                                    {item[`${m}__id`] !== undefined ? (
+                                      editingNilaiCell === `${item.nama_siswa}_${item.kelas}_${m}` ? (
+                                        <input
+                                          autoFocus
+                                          type="number"
+                                          min="0"
+                                          step="0.1"
+                                          value={editingNilaiValue}
+                                          onChange={(event) => setEditingNilaiValue(event.target.value)}
+                                          onBlur={() => handleSaveNilai(item, m)}
+                                          onKeyDown={(event) => {
+                                            if (event.key === "Enter") event.currentTarget.blur();
+                                            if (event.key === "Escape") setEditingNilaiCell(null);
+                                          }}
+                                          className="w-20 rounded-lg border border-emerald-300 bg-white px-2 py-1 text-center text-sm font-bold text-slate-700 outline-none ring-2 ring-emerald-100"
+                                        />
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          title="Klik untuk mengubah nilai"
+                                          onClick={() => {
+                                            setEditingNilaiCell(`${item.nama_siswa}_${item.kelas}_${m}`);
+                                            setEditingNilaiValue(String(skor ?? ""));
+                                          }}
+                                          className="rounded-md px-2 py-1 font-bold hover:bg-emerald-100 hover:text-emerald-700"
+                                        >
+                                          {skor !== undefined ? skor : "-"}
+                                        </button>
+                                      )
+                                    ) : "-"}
                                   </td>
                                 );
                               })}
@@ -3278,11 +3371,35 @@ Patuhi aturan berikut secara ketat:
                                 <span className="text-slate-500 font-semibold">
                                   {m}
                                 </span>
-                                <span
-                                  className={`font-bold ${isKkmFailed ? "text-rose-500" : "text-slate-700"}`}
-                                >
-                                  {skor !== undefined ? skor : "-"}
-                                </span>
+                                {item[`${m}__id`] !== undefined && editingNilaiCell === `${item.nama_siswa}_${item.kelas}_${m}` ? (
+                                  <input
+                                    autoFocus
+                                    type="number"
+                                    min="0"
+                                    step="0.1"
+                                    value={editingNilaiValue}
+                                    onChange={(event) => setEditingNilaiValue(event.target.value)}
+                                    onBlur={() => handleSaveNilai(item, m)}
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter") event.currentTarget.blur();
+                                      if (event.key === "Escape") setEditingNilaiCell(null);
+                                    }}
+                                    className="w-20 rounded-lg border border-emerald-300 px-2 py-1 text-right font-bold text-slate-700 outline-none"
+                                  />
+                                ) : (
+                                  <button
+                                    type="button"
+                                    title="Klik untuk mengubah nilai"
+                                    disabled={item[`${m}__id`] === undefined}
+                                    onClick={() => {
+                                      setEditingNilaiCell(`${item.nama_siswa}_${item.kelas}_${m}`);
+                                      setEditingNilaiValue(String(skor ?? ""));
+                                    }}
+                                    className={`rounded-md px-2 py-1 font-bold hover:bg-emerald-100 hover:text-emerald-700 ${isKkmFailed ? "text-rose-500" : "text-slate-700"}`}
+                                  >
+                                    {skor !== undefined ? skor : "-"}
+                                  </button>
+                                )}
                               </div>
                             );
                           })}

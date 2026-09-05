@@ -1003,82 +1003,82 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       `}</style>
 
-      <div className="space-y-6 max-w-7xl mx-auto pb-24 relative">
-        <div className="md:hidden flex flex-col gap-4 px-2 pt-2">
-          <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-5 text-white shadow-lg relative overflow-hidden">
-            <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
-            <div className="flex justify-between items-center relative z-10">
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold mb-0.5">
-                  TADBIRA
+      <div className="admin-dashboard space-y-3 max-w-[1440px] mx-auto pb-20 relative">
+        <div className="md:hidden flex flex-col gap-2 px-2 pt-1">
+          <div className="flex h-14 items-center justify-between rounded-xl bg-gradient-to-r from-slate-900 to-slate-800 px-3 text-white shadow-sm">
+            <div className="flex min-w-0 items-center gap-2">
+              <ShieldCheck size={18} className="shrink-0 text-emerald-400" />
+              <div className="min-w-0">
+                <p className="truncate text-[13px] font-black">Database {currentConfig.title.replace("Database ", "")}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                  Total data: <span className="text-emerald-400">{processedData.length}</span>
                 </p>
-                <h2 className="text-xl font-black leading-tight">
-                  Administrator
-                </h2>
-              </div>
-              <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center border border-slate-700">
-                <ShieldCheck size={20} className="text-emerald-400" />
               </div>
             </div>
-            <div className="mt-6 flex items-end justify-between relative z-10">
-              <div>
-                <p className="text-3xl font-black leading-none mb-1">
-                  {processedData.length}
-                </p>
-                <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">
-                  Data {currentConfig.title}
-                </p>
-              </div>
-              <button
-                onClick={() => refreshCurrentTab(false)}
-                className="p-2 bg-slate-800 border border-slate-700 rounded-lg hover:bg-slate-700 transition-colors"
-              >
-                <RefreshCw
-                  size={16}
-                  className={
-                    loading || isSyncing
-                      ? "animate-spin text-emerald-400"
-                      : "text-slate-300"
-                  }
-                />
-              </button>
-            </div>
+            <button
+              onClick={() => refreshCurrentTab(false)}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-800"
+              aria-label="Muat ulang data"
+            >
+              <RefreshCw size={15} className={loading || isSyncing ? "animate-spin text-emerald-400" : "text-slate-300"} />
+            </button>
           </div>
 
-          <div className="grid grid-cols-4 gap-2">
+          <div className="flex gap-2 overflow-x-auto pb-0.5">
             {MENU_ITEMS.map((menu) => {
               const Icon = menu.icon;
               return (
                 <button
                   key={menu.id}
                   onClick={() => setTab(menu.id)}
-                  className={`py-3 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all border ${tab === menu.id ? "bg-emerald-500 border-emerald-500 text-white shadow-md" : "bg-white border-slate-200 text-slate-500"}`}
+                  className={`flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3 transition-all ${tab === menu.id ? "border-emerald-500 bg-emerald-500 text-white shadow-md" : "border-slate-200 bg-white text-slate-500"}`}
                 >
-                  <Icon size={18} />
-                  <span className="text-[9px] font-bold">
-                    {menu.label.split(" ")[1] || menu.label}
-                  </span>
+                  <Icon size={15} />
+                  <span className="text-[11px] font-bold">{menu.id === "siswa" ? "User" : menu.id === "jadwal" ? "Ujian" : menu.id === "mapel" ? "Pelajaran" : "Config"}</span>
                 </button>
               );
             })}
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
             <button
               onClick={() => navigate("/ujian-dashboard")}
-              className="w-full py-2 bg-indigo-600 text-white rounded-xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-md shadow-indigo-500/30 hover:bg-indigo-700 active:scale-95 transition-all"
+              className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-2 text-[10px] font-black uppercase tracking-wide text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-700 active:scale-95 transition-all"
             >
-              <MonitorSmartphone size={16} /> Live Ujian
+              <MonitorSmartphone size={15} /> Live Ujian
             </button>
             <button
               onClick={handleAddNewRow}
-              className="w-full py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-emerald-100 active:scale-95 transition-all"
+              className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2 text-[10px] font-black uppercase tracking-wide text-emerald-700 hover:bg-emerald-100 active:scale-95 transition-all"
             >
-              <Plus size={16} /> Tambah Baris Kosong
+              <Plus size={15} /> Tambah Data
             </button>
+          </div>
+
+          <div className="flex gap-2">
+            <div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 shadow-sm">
+              <Search className="ml-1 shrink-0 text-slate-400" size={16} />
+              <input
+                className="w-full min-w-0 bg-transparent text-[13px] font-semibold text-slate-700 outline-none placeholder:text-slate-400"
+                placeholder="Cari data..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <button
+              onClick={() => setIsMobileFilterOpen(true)}
+              className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm"
+              aria-label="Buka filter"
+            >
+              <ListChecks size={18} />
+              {(Object.values(filters).some(Boolean) || sortConfig.key !== "id") && (
+                <span className="absolute right-1 top-1 h-2 w-2 rounded-full border border-white bg-red-500"></span>
+              )}
+            </button>
+          </div>
 
             {tab === "settings" && (
-              <div className="grid grid-cols-1 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <CompactSettingToggle label="Anti-cheat" checked={isAntiCheatOn} onClick={handleToggleAntiCheat} icon={ShieldCheck} />
                 <CompactSettingToggle label="Akses aplikasi" checked={isAppOnlyOn} onClick={handleToggleAppOnly} icon={isAppOnlyOn ? Lock : Unlock} />
                 <CompactSettingToggle label="Hapus massal" checked={isDeleteAllOn} onClick={handleToggleDeleteAll} icon={Trash2} />
@@ -1086,48 +1086,26 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
               </div>
             )}
 
-            <div className="flex gap-2">
-              <div className="bg-white rounded-xl p-2.5 shadow-sm border border-slate-200 flex-1 flex items-center gap-2">
-                <Search className="text-slate-400 ml-2 shrink-0" size={16} />
-                <input
-                  className="w-full bg-transparent border-none outline-none font-semibold text-sm text-slate-700 py-1 placeholder:text-slate-400"
-                  placeholder="Cari data..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-              <button
-                onClick={() => setIsMobileFilterOpen(true)}
-                className="bg-white text-slate-600 p-3 rounded-xl shadow-sm border border-slate-200 flex items-center justify-center relative hover:bg-slate-50 transition-colors shrink-0"
-              >
-                <ListChecks size={20} />
-                {(Object.values(filters).some(Boolean) ||
-                  sortConfig.key !== "id") && (
-                  <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
-                )}
-              </button>
-            </div>
-          </div>
         </div>
 
-        <header className="hidden md:flex shrink-0 relative flex-col items-stretch p-5 lg:p-6 rounded-[1.5rem] shadow-sm border border-emerald-100/50 gap-5 overflow-hidden bg-gradient-to-br from-emerald-50 to-teal-100 z-0">
+        <header className="hidden md:flex shrink-0 relative flex-col items-stretch p-3 lg:p-4 rounded-2xl shadow-sm border border-emerald-100/50 gap-3 overflow-hidden bg-gradient-to-br from-emerald-50 to-teal-100 z-0">
           <div className="absolute -top-20 -left-10 w-72 h-72 bg-white/40 rounded-full -z-10 blur-xl"></div>
           <div className="absolute -bottom-20 right-10 w-80 h-80 bg-emerald-200/30 rounded-full -z-10 blur-xl"></div>
 
           <div className="flex items-center gap-3 z-10">
-            <div className="p-3 bg-white/80 text-emerald-600 rounded-xl shadow-sm border border-white/60">
-              <Settings size={24} className={isSyncing ? "animate-spin" : ""} />
+            <div className="p-2 bg-white/80 text-emerald-600 rounded-lg shadow-sm border border-white/60">
+              <Settings size={20} className={isSyncing ? "animate-spin" : ""} />
             </div>
             <div>
-              <h2 className="text-xl lg:text-2xl font-black text-slate-800 tracking-tight drop-shadow-sm">
+              <h2 className="text-lg lg:text-xl font-black text-slate-800 tracking-tight drop-shadow-sm">
                 {currentConfig.title}
               </h2>
               <div className="flex items-center gap-2 mt-1">
-                <p className="text-slate-600 font-medium text-sm">
+                <p className="text-slate-600 font-medium text-xs">
                   {currentConfig.subtitle}
                 </p>
                 {isSyncing && (
-                  <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-md text-[10px] font-bold uppercase animate-pulse border border-amber-200">
+                  <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-md text-[10px] font-bold uppercase border border-amber-200">
                     <RefreshCw size={10} className="animate-spin" /> Syncing...
                   </span>
                 )}
@@ -1143,24 +1121,24 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
                 <SettingToggle label="Timer ujian" description="Batasi durasi sesuai jadwal" checked={isTimerOn} onClick={handleToggleTimer} icon={Timer} />
               </div>
             )}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="admin-desktop-actions flex flex-wrap items-center gap-2">
               <button
                 onClick={() => navigate("/ujian-dashboard")}
-                className="flex-1 min-w-[9rem] bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-indigo-500/30 flex items-center justify-center gap-2 hover:bg-indigo-700 active:scale-95 transition-all text-sm border border-indigo-400 z-10"
+                className="flex-1 min-w-[9rem] h-10 bg-indigo-600 text-white px-3 rounded-lg font-bold shadow-md shadow-indigo-500/30 flex items-center justify-center gap-2 hover:bg-indigo-700 active:scale-95 transition-all text-xs border border-indigo-400 z-10"
               >
-                <MonitorSmartphone size={18} className="animate-pulse" /> Live Ujian
+                <MonitorSmartphone size={18} /> Live Ujian
               </button>
               {tab === "siswa" && (
                 <button
                   onClick={handleCetakKartu}
-                  className="flex-1 min-w-[9rem] bg-blue-600 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-blue-500/30 flex items-center justify-center gap-2 hover:bg-blue-700 active:scale-95 transition-all text-sm border border-blue-400 z-10"
+                  className="flex-1 min-w-[9rem] h-10 bg-blue-600 text-white px-3 rounded-lg font-bold shadow-md shadow-blue-500/30 flex items-center justify-center gap-2 hover:bg-blue-700 active:scale-95 transition-all text-xs border border-blue-400 z-10"
                 >
                   <Printer size={18} /> Cetak Kartu Login
                 </button>
               )}
               <button
                 onClick={handleAddNewRow}
-                className="flex-1 min-w-[9rem] bg-gradient-to-r from-emerald-600 to-emerald-500 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-emerald-500/30 flex items-center justify-center gap-2 hover:from-emerald-700 hover:to-emerald-600 active:scale-95 transition-all text-sm border border-emerald-400 z-10"
+                className="flex-1 min-w-[9rem] h-10 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white px-3 rounded-lg font-bold shadow-md shadow-emerald-500/30 flex items-center justify-center gap-2 hover:from-emerald-700 hover:to-emerald-600 active:scale-95 transition-all text-xs border border-emerald-400 z-10"
               >
                 <Plus size={18} /> Tambah Data Baru
               </button>
@@ -1169,15 +1147,15 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
         </header>
 
         <div className="hidden md:flex shrink-0 items-stretch gap-4">
-          <Card className="p-5 bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 shadow-xl w-[200px] shrink-0 rounded-[2rem] relative overflow-hidden flex flex-col justify-center">
+          <Card className="p-3 bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 shadow-xl w-[170px] shrink-0 rounded-2xl relative overflow-hidden flex flex-col justify-center">
             <div className="absolute top-0 right-0 p-4 opacity-10">
               <ShieldCheck size={56} className="text-emerald-400" />
             </div>
-            <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest relative z-10">
+            <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest relative z-10">
               Total Data
             </p>
-            <div className="flex items-baseline gap-2 mt-3 relative z-10">
-              <p className="text-4xl font-black text-white">
+            <div className="flex items-baseline gap-2 mt-1 relative z-10">
+              <p className="text-3xl font-black text-white">
                 {processedData.length}
               </p>
             </div>

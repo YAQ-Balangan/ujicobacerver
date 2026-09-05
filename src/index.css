@@ -176,6 +176,63 @@ textarea {
 }
 
 @media (max-width: 639px) {
+  .login-page {
+    padding: 0.5rem;
+  }
+
+  .login-card {
+    max-width: 240px;
+    margin: 0.5rem;
+    padding: 1rem;
+    border-radius: 1.25rem;
+    box-shadow:
+      6px 6px 12px #cbd5e1,
+      -6px -6px 12px #ffffff;
+  }
+
+  .login-card > div:first-child {
+    margin-bottom: 1rem;
+  }
+
+  .login-card > div:first-child > div:first-child {
+    width: 3rem;
+    height: 3rem;
+    margin-bottom: 0.625rem;
+    padding: 0.5rem;
+    border-radius: 0.875rem;
+  }
+
+  .login-card h1 {
+    font-size: 1rem;
+  }
+
+  .login-card form {
+    gap: 0.75rem;
+  }
+
+  .login-card form > div {
+    gap: 0.375rem;
+  }
+
+  .login-card input {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    font-size: 0.6875rem;
+  }
+
+  .login-card form > div:last-child {
+    padding-top: 0.5rem;
+  }
+
+  .login-card form > div:last-child button {
+    padding-top: 0.625rem;
+    padding-bottom: 0.625rem;
+  }
+
+  .login-card > p:last-child {
+    margin-top: 1rem;
+  }
+
   .tadbira-main {
     padding: 0.75rem;
   }
@@ -183,6 +240,90 @@ textarea {
   .tadbira-header {
     min-height: 3.5rem;
     padding: 0.625rem 0.75rem;
+  }
+
+  .siswa-exam-header {
+    gap: 0.375rem;
+    padding-inline: 0.5rem;
+    padding-block: 0.5rem;
+  }
+
+  .siswa-exam-header > :first-child {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .siswa-exam-header > :first-child > div:last-child {
+    min-width: 0;
+  }
+
+  .siswa-exam-header h1,
+  .siswa-exam-header p {
+    max-width: 6.5rem;
+  }
+
+  .siswa-exam-header h1 {
+    font-size: 0.75rem;
+  }
+
+  .siswa-exam-header p {
+    font-size: 0.5rem;
+  }
+
+  .siswa-exam-header > :last-child {
+    gap: 0.25rem;
+    flex: 0 0 auto;
+  }
+
+  .siswa-exam-font-controls button {
+    width: 1.9rem;
+    min-width: 1.9rem;
+    height: 2.25rem;
+    font-size: 0.75rem;
+  }
+
+  .siswa-exam-font-controls button span {
+    font-size: 0.5rem;
+  }
+
+  .siswa-exam-zoom-controls button {
+    width: 1.5rem;
+    height: 2.25rem;
+    font-size: 0.75rem;
+  }
+
+  .siswa-exam-zoom-controls > div {
+    width: 0.25rem;
+  }
+
+  .siswa-exam-mode-badge {
+    padding: 0.5rem;
+    font-size: 0.5rem;
+  }
+
+  .siswa-exam-mode-badge svg {
+    width: 0.75rem;
+    height: 0.75rem;
+  }
+
+  .siswa-exam-timer {
+    gap: 0.25rem;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.75rem;
+  }
+
+  .siswa-exam-timer svg {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  .siswa-exam-timer span:first-of-type {
+    display: none;
+  }
+
+  .siswa-exam-timer span:last-of-type {
+    font-size: 0.75rem;
+    letter-spacing: 0;
   }
 }
 
@@ -200,4 +341,237 @@ textarea {
 
 .tadbira-shell :where(h1, h2, h3, h4, p, label, button, span) {
   overflow-wrap: anywhere;
+}
+
+/* Guru dashboard keeps dense monitoring controls usable without horizontal overflow. */
+.guru-dashboard .guru-mobile-menu > div > button {
+  flex: 0 0 4.5rem;
+  min-width: 4.5rem;
+  scroll-snap-align: start;
+}
+
+.guru-dashboard .guru-mobile-menu > div > button > div {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.guru-dashboard .guru-mobile-menu > div > button svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.guru-dashboard .guru-mobile-menu > div > button span {
+  font-size: 0.625rem;
+}
+
+.guru-dashboard .guru-history-label {
+  display: none;
+}
+
+.guru-nilai-history-button {
+  min-height: 2.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background: #ffffff;
+  padding: 0.625rem 0.875rem;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.guru-nilai-history-button:hover:not(:disabled) {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.guru-nilai-history-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .guru-dashboard {
+    padding-bottom: 4rem;
+  }
+
+  .guru-dashboard .guru-mobile-welcome {
+    border-radius: 1.25rem;
+  }
+
+  .guru-dashboard .guru-desktop-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .guru-dashboard .guru-question-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .guru-dashboard .guru-question-actions .guru-history-actions {
+    display: contents;
+  }
+
+  .guru-dashboard .guru-history-button {
+    width: 100%;
+    min-height: 2.5rem;
+    padding: 0.625rem 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+  }
+
+  .guru-dashboard .guru-history-label {
+    display: inline;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  .guru-dashboard .guru-question-actions > .guru-action-button,
+  .guru-dashboard .guru-question-actions > .guru-history-button {
+    min-width: 0;
+  }
+
+  .guru-dashboard .guru-action-button {
+    min-width: 0;
+    min-height: 2.5rem;
+    padding: 0.625rem 0.75rem;
+    font-size: 0.75rem;
+    line-height: 1.15;
+  }
+
+  .guru-dashboard .guru-filter-row {
+    flex-wrap: wrap;
+  }
+
+  .guru-dashboard .guru-filter-search {
+    flex: 1 1 auto;
+    min-width: 10rem;
+    min-height: 2.5rem;
+    border: 0;
+    padding: 0 0.25rem;
+  }
+
+  .guru-dashboard .guru-filter-row > div:last-child {
+    flex: 1 1 auto;
+    min-width: 17rem;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .guru-dashboard .guru-filter-options {
+    flex: 1 1 auto;
+    grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+  }
+
+  .guru-dashboard .guru-filter-options > div {
+    width: auto;
+  }
+
+  .guru-dashboard .guru-filter-row > div:last-child > button {
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+  }
+
+  .guru-dashboard .guru-filter-card {
+    min-height: 0;
+  }
+
+  .guru-dashboard .guru-filter-row {
+    align-items: stretch;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .guru-dashboard .guru-filter-main-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+  }
+
+  .guru-dashboard .guru-filter-main-row.has-actions {
+    grid-template-columns: minmax(15rem, auto) minmax(0, 1fr);
+  }
+
+  .guru-dashboard .guru-filter-actions {
+    min-width: 0;
+  }
+
+  .guru-dashboard .guru-filter-options-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding-top: 0.25rem;
+    border-top: 1px solid #f1f5f9;
+  }
+
+  .guru-dashboard .guru-filter-main-row > :first-child,
+  .guru-dashboard .guru-filter-options-row {
+    min-width: 0;
+  }
+
+  .guru-dashboard .guru-filter-options-row > :first-child {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .guru-dashboard .guru-filter-options {
+    min-width: 0;
+  }
+
+  .guru-dashboard .guru-filter-options > div {
+    min-width: 0;
+  }
+
+  .guru-dashboard .guru-filter-options button {
+    min-width: 0;
+    font-size: 0.75rem;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .admin-dashboard .admin-desktop-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .admin-dashboard .admin-desktop-actions > button {
+    min-width: 0;
+    min-height: 2.5rem;
+    padding-inline: 0.625rem;
+    font-size: 0.75rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .admin-dashboard .admin-desktop-actions > button,
+  .guru-dashboard .guru-action-button {
+    min-height: 2.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .guru-dashboard > header {
+    min-height: 5.25rem;
+  }
+
+  .guru-dashboard .overflow-auto.max-h-\[65vh\] {
+    max-height: calc(100vh - 21rem);
+  }
 }

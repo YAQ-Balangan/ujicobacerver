@@ -18,10 +18,28 @@ export default function DataTableAdmin({
   handleCopyBroadcast,
   getFilterOptions,
 }) {
-  return (
-    <Card className="hidden md:flex flex-col w-full h-[clamp(360px,calc(100dvh-27rem),620px)] min-h-[360px] max-h-[620px] border border-slate-200 shadow-xl shadow-slate-200/40 bg-white rounded-[2rem] overflow-hidden relative">
+const isScheduleTable = tab === "jadwal";
+const scheduleColumnWidths = {
+  id: "64px",
+  nama_ujian: "150px",
+  mapel: "130px",
+  kelas: "150px",
+  tanggal: "105px",
+  durasi_menit: "90px",
+  token: "75px",
+  acak_soal: "105px",
+  status: "90px",
+};
+
+const getColumnStyle = (key) =>
+  isScheduleTable && scheduleColumnWidths[key]
+    ? { width: scheduleColumnWidths[key], maxWidth: scheduleColumnWidths[key] }
+    : undefined;
+
+return (
+    <Card className="hidden md:flex flex-col w-full h-[clamp(320px,calc(100dvh-22rem),620px)] min-h-[320px] max-h-[620px] border border-slate-200 shadow-xl shadow-slate-200/40 bg-white rounded-2xl overflow-hidden relative">
       <div className="flex-1 overflow-auto w-full relative custom-scrollbar">
-        <table className="w-full text-left text-sm whitespace-nowrap border-collapse min-w-max">
+        <table className={`w-full text-left text-sm border-collapse ${isScheduleTable ? "table-fixed" : "whitespace-nowrap min-w-max"}`}>
           <thead className="sticky top-0 z-20 shadow-sm">
             <tr>
               {currentConfig.columns.map((col, index) => {
@@ -30,14 +48,14 @@ export default function DataTableAdmin({
                 const stickyStyle = isID
                   ? { position: "sticky", left: 0, zIndex: 30 }
                   : isName
-                    ? { position: "sticky", left: "80px", zIndex: 30 }
+                    ? { position: "sticky", left: "64px", zIndex: 30 }
                     : {};
                 return (
                   <th
                     key={col.key}
-                    style={stickyStyle}
+                    style={{ ...stickyStyle, ...getColumnStyle(col.key) }}
                     onClick={() => col.sortable && handleSort(col.key)}
-                    className={`px-6 py-5 bg-slate-50 border-b-2 border-slate-200 text-slate-500 font-bold text-xs uppercase tracking-wider ${col.sortable ? "cursor-pointer hover:bg-slate-100" : ""} ${isID ? "border-r w-[80px]" : ""} ${isName ? "border-r shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] w-[240px]" : ""}`}
+                    className={`px-3 py-2.5 bg-slate-50 border-b-2 border-slate-200 text-slate-500 font-bold text-[10px] uppercase tracking-wider ${isScheduleTable ? "whitespace-normal break-words" : ""} ${col.sortable ? "cursor-pointer hover:bg-slate-100" : ""} ${isID ? "border-r w-[64px]" : ""} ${isName ? "border-r shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] w-[220px]" : ""}`}
                   >
                     <div className="flex items-center gap-2">
                       <span
@@ -75,7 +93,7 @@ export default function DataTableAdmin({
                   </th>
                 );
               })}
-              <th className="px-6 py-5 text-center bg-slate-50 border-b-2 border-slate-200 text-slate-500 font-bold text-xs uppercase tracking-wider w-[140px]">
+              <th className="px-4 py-2.5 text-center bg-slate-50 border-b-2 border-slate-200 text-slate-500 font-bold text-[10px] uppercase tracking-wider w-[120px]">
                 Aksi
               </th>
             </tr>
@@ -111,13 +129,13 @@ export default function DataTableAdmin({
                     const stickyStyle = isID
                       ? { position: "sticky", left: 0, zIndex: 10 }
                       : isName
-                        ? { position: "sticky", left: "80px", zIndex: 10 }
+                        ? { position: "sticky", left: "64px", zIndex: 10 }
                         : {};
                     return (
                       <td
                         key={col.key}
-                        style={stickyStyle}
-                        className={`px-4 py-3 font-semibold text-slate-700 ${isID ? "border-r border-slate-100 bg-inherit" : ""} ${isName ? "border-r border-slate-100 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.03)] bg-inherit" : ""}`}
+                        style={{ ...stickyStyle, ...getColumnStyle(col.key) }}
+                        className={`px-2 py-2 font-semibold text-sm text-slate-700 ${isScheduleTable ? "whitespace-normal break-words align-top" : ""} ${isID ? "border-r border-slate-100 bg-inherit" : ""} ${isName ? "border-r border-slate-100 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.03)] bg-inherit" : ""}`}
                       >
                         <EditableCell
                           item={item}
@@ -150,12 +168,12 @@ export default function DataTableAdmin({
                       </td>
                     );
                   })}
-                  <td className="px-4 py-3 text-center whitespace-nowrap bg-inherit">
+                  <td className="px-3 py-2 text-center whitespace-nowrap bg-inherit">
                     <div className="flex justify-center items-center gap-2">
                       {tab === "jadwal" && !item.isNew && (
                         <button
                           onClick={() => handleCopyBroadcast(item)}
-                          className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-600 rounded-lg hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
+                          className="p-1.5 bg-emerald-50 border border-emerald-200 text-emerald-600 rounded-lg hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
                           title="Salin Broadcast WA (Jadwal & Token)"
                         >
                           <Share2 size={16} />
@@ -164,7 +182,7 @@ export default function DataTableAdmin({
                       {!item.isNew && tab !== "settings" && (
                         <button
                           onClick={() => handleDuplicateRow(item)}
-                          className="p-2 bg-blue-50 border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-500 hover:text-white transition-all shadow-sm"
+                          className="p-1.5 bg-blue-50 border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-500 hover:text-white transition-all shadow-sm"
                           title="Duplikat Data Ini (Clone)"
                         >
                           <Files size={16} />
@@ -172,7 +190,7 @@ export default function DataTableAdmin({
                       )}
                       <button
                         onClick={() => confirmDelete(item.id)}
-                        className="p-2 bg-red-50 border border-red-200 text-red-600 rounded-lg hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                        className="p-1.5 bg-red-50 border border-red-200 text-red-600 rounded-lg hover:bg-red-500 hover:text-white transition-all shadow-sm"
                         title="Hapus Baris"
                       >
                         <Trash2 size={16} />

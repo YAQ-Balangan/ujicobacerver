@@ -29,6 +29,10 @@ import {
   Maximize,
   X,
   BookMarked,
+  UserCircle,
+  Camera,
+  Save,
+  Trash2,
 } from "lucide-react";
 import { AuthContext } from "../context/AuthContext";
 import { api, supabase } from "../api/api";
@@ -110,15 +114,15 @@ const formatTanggalLokal = (dateString) => {
 
 const fontClasses = {
   wacana: [
-    "text-[13px] md:text-[15px]",
-    "text-[15px] md:text-[17px]",
-    "text-[17px] md:text-[19px]",
+    "text-[14px] md:text-[16px]",
+    "text-[16px] md:text-[18px]",
+    "text-[18px] md:text-[20px]",
   ],
-  soal: ["text-sm md:text-lg", "text-base md:text-xl", "text-lg md:text-2xl"],
+  soal: ["text-base md:text-lg", "text-lg md:text-xl", "text-xl md:text-2xl"],
   opsi: [
-    "text-[13px] md:text-base",
-    "text-[15px] md:text-lg",
-    "text-base md:text-xl",
+    "text-sm md:text-base",
+    "text-base md:text-lg",
+    "text-lg md:text-xl",
   ],
 };
 
@@ -184,7 +188,7 @@ const ExamTimer = React.memo(({ initialTime, onTick, onTimeChange, onTimeUp, tim
 
   return (
     <div
-      className={`shrink-0 flex items-center gap-2 px-3 md:px-4 py-2 rounded-xl border shadow-sm transition-colors ${className} ${enabled && timeLeft < 300 ? "bg-red-50 text-red-600 border-red-200" : "bg-slate-800 text-white border-slate-700"}`}
+      className={`siswa-exam-timer shrink-0 flex items-center gap-2 px-3 md:px-4 py-2 rounded-xl border shadow-sm transition-colors ${className} ${enabled && timeLeft < 300 ? "bg-red-50 text-red-600 border-red-200" : "bg-slate-800 text-white border-slate-700"}`}
     >
       <Timer size={18} />
       <div className="flex flex-col">
@@ -200,7 +204,7 @@ const ExamTimer = React.memo(({ initialTime, onTick, onTimeChange, onTimeUp, tim
 });
 
 const SiswaDashboard = () => {
-  const { user } = useContext(AuthContext);
+  const { user, updateUser } = useContext(AuthContext);
   const userUsername = String(getVal(user, "Username") || "").trim();
   const [activeTab, setActiveTab] = useState("home");
   const [loading, setLoading] = useState(true);
@@ -218,6 +222,26 @@ const SiswaDashboard = () => {
 
   const [exams, setExams] = useState([]);
   const [myResults, setMyResults] = useState([]);
+  const [profileForm, setProfileForm] = useState({
+    username: "",
+    oldPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+    fotoProfil: "",
+    fotoPosisi: "50% 50%",
+  });
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [profileMessage, setProfileMessage] = useState("");
+
+  useEffect(() => {
+    if (!user) return;
+    setProfileForm((prev) => ({
+      ...prev,
+      fotoPosisi: getVal(user, "foto_posisi") || prev.fotoPosisi || "50% 50%",
+    }));
+  }, [user]);
+
   const scoreInsights = useMemo(() => {
     const grouped = myResults.reduce((groups, result) => {
       const subject = getVal(result, "Mapel") || "Ujian";
@@ -238,6 +262,43 @@ const SiswaDashboard = () => {
         : 0,
     };
   }, [myResults]);
+  const reportMessage = useMemo(() => {
+    if (!myResults.length) return "";
+    const average = scoreInsights.average;
+    const strongest = scoreInsights.subjects[0]?.subject || "pelajaranmu";
+    const messages = average >= 85
+      ? [
+          "MasyaAllah, capaianmu sangat baik. Pertahankan ikhtiar dan terus jaga kejujuran dalam belajar.",
+          "Alhamdulillah, hasilmu menunjukkan ketekunan yang kuat. Semoga ilmu ini semakin bermanfaat.",
+          "Barakallahu fiik, prestasimu membanggakan. Tetap rendah hati dan bantu teman yang membutuhkan.",
+          "MasyaAllah, kamu menunjukkan persiapan yang matang. Jadikan keberhasilan ini penyemangat untuk berkembang.",
+          `Alhamdulillah, kemampuanmu pada ${strongest} terlihat menonjol. Teruslah belajar dengan istiqamah.`,
+          "Capaianmu sangat menggembirakan. Syukuri hasilnya dan lanjutkan dengan disiplin yang konsisten.",
+          "MasyaAllah, usaha yang sabar menghasilkan nilai yang indah. Semoga Allah menambah ilmu dan keberkahanmu.",
+        ]
+      : average >= 70
+        ? [
+            "Alhamdulillah, hasilmu sudah baik. Sedikit ketekunan tambahan akan membantumu meraih capaian yang lebih tinggi.",
+            "Perkembanganmu menunjukkan usaha yang nyata. Teruskan belajar secara teratur dan jangan mudah menyerah.",
+            "MasyaAllah, fondasi belajarmu sudah kuat. Perbanyak latihan pada materi yang masih terasa sulit.",
+            "Hasil ini adalah langkah baik. Dengan doa, disiplin, dan evaluasi, insyaAllah prestasimu akan meningkat.",
+            "Kamu sudah berada di jalur yang tepat. Jadikan setiap kesalahan sebagai guru untuk menjadi lebih baik.",
+            `Alhamdulillah, ikhtiarmu mulai terlihat. Pertahankan ${strongest} dan tingkatkan mapel lainnya secara bertahap.`,
+            "Nilaimu cukup baik dan masih memiliki ruang untuk tumbuh. Belajar sedikit demi sedikit dengan istiqamah.",
+          ]
+        : [
+            "Jangan berkecil hati. Setiap proses belajar bernilai ibadah ketika dilakukan dengan niat yang baik.",
+            "Hasil ini bukan akhir perjalanan. Mari mulai lagi dengan target kecil, latihan rutin, dan doa.",
+            "Allah melihat setiap ikhtiarmu. Evaluasi bagian yang sulit dan terus melangkah dengan sabar.",
+            "Nilai hari ini adalah bahan evaluasi, bukan penentu masa depan. Kamu masih bisa berkembang.",
+            "Tetap semangat memperbaiki diri. Tanyakan materi yang belum dipahami dan berlatih secara bertahap.",
+            "Tidak apa-apa belum sempurna. Keberanian untuk mencoba kembali adalah bagian dari keberhasilan.",
+          ];
+    const seed = String(getVal(user, "Username") || "")
+      .split("")
+      .reduce((sum, char) => sum + char.charCodeAt(0), 0) + myResults.length;
+    return messages[seed % messages.length];
+  }, [myResults, scoreInsights, user]);
   const [tokens, setTokens] = useState({});
   const [activeExam, setActiveExam] = useState(null);
   const [activeAttempt, setActiveAttempt] = useState(1);
@@ -280,10 +341,10 @@ const SiswaDashboard = () => {
       if (e.ctrlKey || e.metaKey) {
         if (e.key === "=" || e.key === "+") {
           e.preventDefault();
-          setPageZoom((prev) => Math.min(2.0, prev + 0.1));
+          setPageZoom((prev) => Math.min(1.1, prev + 0.05));
         } else if (e.key === "-") {
           e.preventDefault();
-          setPageZoom((prev) => Math.max(0.5, prev - 0.1));
+          setPageZoom((prev) => Math.max(0.9, prev - 0.05));
         } else if (e.key === "0") {
           e.preventDefault();
           setPageZoom(1);
@@ -1573,6 +1634,85 @@ const SiswaDashboard = () => {
     }));
   };
 
+  const compressProfileImage = (file) =>
+    new Promise((resolve, reject) => {
+      const image = new Image();
+      const reader = new FileReader();
+      reader.onload = () => {
+        image.onload = () => {
+          const maxSize = 512;
+          const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(image.width * scale));
+          canvas.height = Math.max(1, Math.round(image.height * scale));
+          canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/jpeg", 0.75));
+        };
+        image.onerror = () => reject(new Error("Foto tidak dapat diproses."));
+        image.src = String(reader.result);
+      };
+      reader.onerror = () => reject(new Error("Foto tidak dapat dibaca."));
+      reader.readAsDataURL(file);
+    });
+
+  const handleProfilePhoto = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setProfileError("Pilih file gambar yang valid.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setProfileError("Ukuran foto maksimal 5 MB sebelum kompresi.");
+      return;
+    }
+    try {
+      setProfileError("");
+      const compressed = await compressProfileImage(file);
+      setProfileForm((prev) => ({ ...prev, fotoProfil: compressed }));
+      setProfileMessage("Foto berhasil dikompres dan siap disimpan.");
+    } catch (error) {
+      setProfileError(error.message || "Foto gagal diproses.");
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const handleProfileSave = async (event) => {
+    event.preventDefault();
+    if (profileForm.newPassword && !profileForm.oldPassword) {
+      setProfileError("Masukkan password lama jika ingin mengganti password.");
+      return;
+    }
+    if (profileForm.newPassword && profileForm.newPassword !== profileForm.confirmPassword) {
+      setProfileError("Konfirmasi password baru tidak sama.");
+      return;
+    }
+    setProfileSaving(true);
+    setProfileError("");
+    setProfileMessage("");
+    try {
+      const updated = await api.updateStudentProfile({
+        id: getVal(user, "id"),
+        username: userUsername,
+        oldPassword: profileForm.oldPassword,
+        newUsername: profileForm.username.trim(),
+        newPassword: profileForm.newPassword.trim(),
+        fotoProfil: profileForm.fotoProfil,
+        fotoPosisi: profileForm.fotoPosisi,
+      });
+      const nextUser = { ...user, ...updated, password: undefined };
+      delete nextUser.password;
+      updateUser(nextUser);
+      setProfileForm((prev) => ({ ...prev, oldPassword: "", newPassword: "", confirmPassword: "" }));
+      setProfileMessage("Profil berhasil diperbarui.");
+    } catch (error) {
+      setProfileError(error.message || "Profil gagal diperbarui.");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
   // ==============================================================
   // TAMPILAN BLOKIR EKSKLUSIF APLIKASI
   // ==============================================================
@@ -1706,13 +1846,13 @@ const SiswaDashboard = () => {
       <div className="min-h-screen bg-slate-100 flex flex-col font-sans select-none relative overflow-hidden transition-all duration-300">
         <div className="absolute inset-0 bg-slate-50 z-0 pointer-events-none"></div>
 
-        <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm px-4 py-3 flex justify-between items-center relative">
+        <header className="siswa-exam-header bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm px-4 py-3 flex justify-between items-center relative">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-emerald-500 text-white rounded-xl shadow-sm hidden md:block">
               <ClipboardCheck size={20} />
             </div>
             <div>
-              <h1 className="text-base md:text-lg font-black text-slate-800 uppercase tracking-tighter leading-tight truncate max-w-[120px] sm:max-w-xs">
+              <h1 className="text-base md:text-lg font-black text-slate-800 uppercase tracking-tighter leading-tight truncate max-w-[25vw] sm:max-w-xs">
                 {examMapel}
               </h1>
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none mt-1 truncate max-w-[120px] sm:max-w-xs">
@@ -1721,27 +1861,41 @@ const SiswaDashboard = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 md:gap-3">
-            <button
-              onClick={() => setFontLevel((prev) => (prev + 1) % 3)}
-              className="flex items-center justify-center p-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors border border-slate-200 relative"
-              title="Perbesar Ukuran Teks"
-            >
-              <span className="font-black text-xs md:text-sm">A</span>
-              <span className="font-black text-[10px] md:text-xs">A</span>
-              {fontLevel > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                </span>
-              )}
-            </button>
+          <div className="flex items-center gap-1 md:gap-2 shrink-0">
+            <div className="siswa-exam-font-controls flex items-center rounded-xl border border-slate-200 bg-slate-100 overflow-hidden shadow-sm">
+              <button
+                onClick={() => setFontLevel((prev) => Math.max(0, prev - 1))}
+                disabled={fontLevel === 0}
+                className="h-9 w-9 md:h-10 md:w-10 flex items-center justify-center text-sm md:text-base font-black text-slate-600 hover:bg-slate-200 disabled:opacity-35 transition-colors"
+                title="Perkecil ukuran teks"
+                aria-label="Perkecil ukuran teks"
+              >
+                A<span className="text-[10px]">−</span>
+              </button>
+              <button
+                onClick={() => setFontLevel(0)}
+                className="h-9 min-w-9 px-1 md:h-10 md:min-w-10 flex items-center justify-center text-[10px] md:text-xs font-black text-emerald-600 border-x border-slate-200 hover:bg-slate-200 transition-colors"
+                title="Reset ukuran teks"
+                aria-label="Reset ukuran teks"
+              >
+                A
+              </button>
+              <button
+                onClick={() => setFontLevel((prev) => Math.min(2, prev + 1))}
+                disabled={fontLevel === 2}
+                className="h-9 w-9 md:h-10 md:w-10 flex items-center justify-center text-sm md:text-base font-black text-slate-600 hover:bg-slate-200 disabled:opacity-35 transition-colors"
+                title="Perbesar ukuran teks"
+                aria-label="Perbesar ukuran teks"
+              >
+                A<span className="text-[10px]">+</span>
+              </button>
+            </div>
 
             {/* Tombol Kontrol Zoom Tampilan */}
-            <div className="flex items-center bg-slate-100 border border-slate-200 rounded-xl overflow-hidden shadow-sm h-full">
+            <div className="siswa-exam-zoom-controls flex items-center bg-slate-100 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
               <button
-                onClick={() => setPageZoom((prev) => Math.max(0.5, prev - 0.1))}
-                className="px-4 py-2 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-colors font-black text-base"
+                onClick={() => setPageZoom((prev) => Math.max(0.9, prev - 0.05))}
+                className="h-9 w-8 md:h-10 md:w-9 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-colors font-black text-base"
                 title="Perkecil Tampilan (Ctrl -)"
               >
                 -
@@ -1750,18 +1904,18 @@ const SiswaDashboard = () => {
               {pageZoom !== 1 ? (
                 <button
                   onClick={() => setPageZoom(1)}
-                  className="px-3 py-2 min-w-[54px] flex items-center justify-center text-[11px] font-black text-emerald-600 hover:text-emerald-700 bg-slate-200/50"
+                  className="h-9 min-w-10 px-1 md:h-10 md:min-w-12 flex items-center justify-center text-[10px] font-black text-emerald-600 hover:text-emerald-700 bg-slate-200/50"
                   title="Reset Zoom (Ctrl 0)"
                 >
                   {Math.round(pageZoom * 100)}%
                 </button>
               ) : (
-                <div className="px-4 w-px h-4 bg-slate-300 flex items-center justify-center mx-2"></div>
+                <div className="w-2 h-4 border-x border-slate-300"></div>
               )}
 
               <button
-                onClick={() => setPageZoom((prev) => Math.min(2.0, prev + 0.1))}
-                className="px-4 py-2 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-colors font-black text-base"
+                onClick={() => setPageZoom((prev) => Math.min(1.1, prev + 0.05))}
+                className="h-9 w-8 md:h-10 md:w-9 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-colors font-black text-base"
                 title="Perbesar Tampilan (Ctrl +)"
               >
                 +
@@ -1791,7 +1945,7 @@ const SiswaDashboard = () => {
                   }
                 } catch (e) {}
               }}
-              className="flex items-center justify-center p-2 md:p-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors border border-slate-200 active:scale-95"
+              className="hidden sm:flex items-center justify-center p-2 md:p-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors border border-slate-200 active:scale-95"
               title="Mode Layar Penuh"
             >
               <Maximize size={16} className="md:w-[18px] md:h-[18px]" />
@@ -1799,7 +1953,7 @@ const SiswaDashboard = () => {
             {/* =========================================== */}
 
             {!isAntiCheatActive && (
-              <div className="flex items-center gap-1 bg-amber-100 text-amber-700 px-2 md:px-3 py-2 rounded-xl border border-amber-200 text-[9px] font-black uppercase tracking-widest animate-pulse shadow-sm">
+              <div className="siswa-exam-mode-badge flex items-center gap-1 bg-amber-100 text-amber-700 px-2 md:px-3 py-2 rounded-xl border border-amber-200 text-[9px] font-black uppercase tracking-widest animate-pulse shadow-sm">
                 <ShieldAlert size={14} />{" "}
                 <span className="hidden sm:inline">Mode Uji Coba</span>
                 <span className="sm:hidden">DEV</span>
@@ -1849,7 +2003,7 @@ const SiswaDashboard = () => {
           )}
         </AnimatePresence>
 
-        <main className="flex-1 w-full max-w-7xl mx-auto p-2 md:p-5 flex flex-col justify-center z-10 relative pb-24 lg:pb-5">
+        <main className="flex-1 w-full max-w-[1440px] mx-auto p-2 md:p-5 flex flex-col justify-center z-10 relative pb-24 lg:pb-5">
           {loadingSoal ? (
             <div className="w-full max-w-5xl m-auto rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
               <div className="mb-6 flex items-center justify-between gap-4">
@@ -1868,7 +2022,7 @@ const SiswaDashboard = () => {
             </div>
           ) : (
             <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 w-full h-[calc(100vh-140px)] lg:h-[calc(100vh-120px)] min-h-[500px]">
-              <div className="flex-1 flex flex-col h-full bg-[#F4F4F0] border border-slate-200 rounded-[1.5rem] lg:rounded-[2rem] shadow-sm overflow-hidden relative">
+              <div className="flex-1 lg:flex-[7] min-w-0 flex flex-col h-full bg-[#F4F4F0] border border-slate-200 rounded-[1.5rem] lg:rounded-[2rem] shadow-sm overflow-hidden relative">
                 <div className="px-5 lg:px-6 py-3 lg:py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-2 lg:gap-3">
                     <span className="bg-slate-800 text-white font-black px-3 py-1.5 lg:px-4 rounded-lg text-xs lg:text-sm shadow-sm">
@@ -1976,7 +2130,7 @@ const SiswaDashboard = () => {
                                 }
                               }, 5000);
                             }}
-                            className={`w-full text-left px-5 py-4 md:px-6 md:py-5 rounded-[1.5rem] border-2 transition-all flex items-start gap-4 md:gap-5 group relative overflow-hidden outline-none ${
+                            className={`w-full min-h-14 text-left px-4 py-3 md:px-6 md:py-5 rounded-[1.5rem] border-2 transition-all flex items-start gap-4 md:gap-5 group relative overflow-hidden outline-none ${
                               isSelected
                                 ? "border-emerald-500 bg-emerald-50/50 shadow-md shadow-emerald-500/10 scale-[1.01]"
                                 : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-slate-50 hover:shadow-sm"
@@ -1990,7 +2144,7 @@ const SiswaDashboard = () => {
                             )}
 
                             <span
-                              className={`font-black text-sm md:text-base w-8 h-8 md:w-10 md:h-10 flex items-center justify-center rounded-full shrink-0 transition-all z-10 ${
+                              className={`font-black text-sm md:text-base w-10 h-10 flex items-center justify-center rounded-full shrink-0 transition-all z-10 ${
                                 isSelected
                                   ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/30"
                                   : "bg-slate-100 text-slate-500 border border-slate-200 group-hover:bg-emerald-100 group-hover:text-emerald-700 group-hover:border-emerald-200"
@@ -2054,7 +2208,7 @@ const SiswaDashboard = () => {
                 </div>
               </div>
 
-              <div className="hidden lg:flex w-[320px] xl:w-[380px] flex-col h-full bg-[#F4F4F0] border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden shrink-0 relative z-20">
+              <div className="hidden lg:flex lg:flex-[3] lg:max-w-[380px] min-w-[280px] flex-col h-full bg-[#F4F4F0] border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden shrink-0 relative z-20">
                 <div className="p-6 border-b border-slate-100 bg-slate-50/50 shrink-0">
                   <div className="flex justify-between items-end mb-2">
                     <span className="text-xs font-black uppercase text-slate-500 tracking-widest">
@@ -2411,6 +2565,7 @@ const SiswaDashboard = () => {
       menu={[
         { id: "home", label: "Portal Ujian", icon: LayoutDashboard },
         { id: "nilai", label: "Hasil Ujian", icon: BarChart3 },
+        { id: "profil", label: "Profil Saya", icon: UserCircle },
       ]}
       active={activeTab}
       setActive={setActiveTab}
@@ -2446,8 +2601,8 @@ const SiswaDashboard = () => {
                 </div>
               </div>
               <div className="flex items-center gap-4 pt-4 border-t border-white/10">
-                <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center font-black text-xl border-2 border-white shadow-sm shrink-0">
-                  {getVal(user, "Nama")?.charAt(0)?.toUpperCase() || "S"}
+                <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full overflow-hidden flex items-center justify-center font-black text-xl border-2 border-white shadow-sm shrink-0">
+                  {getVal(user, "foto_profil") ? <img src={getVal(user, "foto_profil")} alt="Foto profil" className="w-full h-full object-cover" style={{ objectPosition: getVal(user, "foto_posisi") || "50% 50%" }} /> : (getVal(user, "Nama")?.charAt(0)?.toUpperCase() || "S")}
                 </div>
                 <div className="min-w-0">
                   <p className="font-bold text-sm md:text-base leading-tight truncate">
@@ -2545,6 +2700,108 @@ const SiswaDashboard = () => {
         </motion.div>
       )}
 
+      {activeTab === "profil" && (
+       <motion.div
+         variants={staggerContainer}
+         initial="hidden"
+         animate="visible"
+         className="max-w-2xl mx-auto space-y-6 pb-24 relative z-10"
+       >
+         <motion.div variants={fadeUp} className="px-2">
+           <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+             <UserCircle className="text-emerald-600" /> Profil Saya
+           </h2>
+           <p className="text-xs font-bold text-slate-400 mt-1">
+             Kelola identitas akun dengan aman.
+           </p>
+         </motion.div>
+         <motion.form
+           variants={fadeUp}
+           onSubmit={handleProfileSave}
+           className="bg-white rounded-[1.5rem] border border-slate-100 shadow-sm p-5 space-y-4"
+         >
+           <div className="flex flex-col items-center gap-3 pb-3 border-b border-slate-100">
+             <div className="w-24 h-24">
+              <div className="w-full h-full rounded-full overflow-hidden bg-emerald-50 border-4 border-white shadow-md flex items-center justify-center text-3xl font-black text-emerald-700">
+               {profileForm.fotoProfil !== null && (profileForm.fotoProfil || getVal(user, "foto_profil")) ? (
+                 <img src={profileForm.fotoProfil || getVal(user, "foto_profil")} alt="Foto profil" className="w-full h-full object-cover" style={{ objectPosition: profileForm.fotoPosisi }} />
+               ) : (
+                 getVal(user, "Nama")?.charAt(0)?.toUpperCase() || "S"
+               )}
+              </div>
+             </div>
+             <div className="flex items-center justify-center gap-2">
+               <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-black border border-emerald-100">
+                 <Camera size={15} /> Pilih Foto
+                 <input type="file" accept="image/*" className="hidden" onChange={handleProfilePhoto} />
+               </label>
+               {(profileForm.fotoProfil || getVal(user, "foto_profil")) && (
+                 <button type="button" aria-label="Hapus foto profil" onClick={() => setProfileForm((prev) => ({ ...prev, fotoProfil: null }))} className="w-10 h-10 rounded-xl bg-red-50 text-red-600 border border-red-200 shadow-sm flex items-center justify-center hover:bg-red-100">
+                   <Trash2 size={16} />
+                 </button>
+               )}
+             </div>
+             <p className="text-[10px] text-slate-400 text-center">Foto dikompres otomatis sebelum disimpan.</p>
+             {(profileForm.fotoProfil || getVal(user, "foto_profil")) && (
+               <div className="w-full max-w-xs space-y-2">
+                 <label className="block text-[10px] font-black text-slate-500 uppercase">Reposisi foto</label>
+                 <input aria-label="Posisi horizontal foto" type="range" min="0" max="100" value={Number(profileForm.fotoPosisi.split(" ")[0].replace("%", ""))} onChange={(event) => setProfileForm((prev) => ({ ...prev, fotoPosisi: `${event.target.value}% ${prev.fotoPosisi.split(" ")[1]}` }))} className="w-full accent-emerald-600" />
+                 <input aria-label="Posisi vertikal foto" type="range" min="0" max="100" value={Number(profileForm.fotoPosisi.split(" ")[1].replace("%", ""))} onChange={(event) => setProfileForm((prev) => ({ ...prev, fotoPosisi: `${prev.fotoPosisi.split(" ")[0]} ${event.target.value}%` }))} className="w-full accent-emerald-600" />
+                 <p className="text-[10px] text-slate-400 text-center">Geser dua pengatur untuk menyesuaikan posisi wajah.</p>
+               </div>
+             )}
+           </div>
+           <label className="block text-xs font-black text-slate-500 uppercase">
+             Username
+             <input
+               value={profileForm.username || userUsername}
+               onChange={(event) => setProfileForm((prev) => ({ ...prev, username: event.target.value }))}
+               className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold outline-none focus:border-emerald-500"
+               required
+             />
+           </label>
+           <label className="block text-xs font-black text-slate-500 uppercase">
+             Password Lama (isi jika mengganti password)
+             <input
+               type="password"
+               value={profileForm.oldPassword}
+               onChange={(event) => setProfileForm((prev) => ({ ...prev, oldPassword: event.target.value }))}
+               className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold outline-none focus:border-emerald-500"
+             />
+           </label>
+           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+             <label className="block text-xs font-black text-slate-500 uppercase">
+               Password Baru
+               <input
+                 type="password"
+                 value={profileForm.newPassword}
+                 onChange={(event) => setProfileForm((prev) => ({ ...prev, newPassword: event.target.value }))}
+                 className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold outline-none focus:border-emerald-500"
+               />
+             </label>
+             <label className="block text-xs font-black text-slate-500 uppercase">
+               Konfirmasi Password
+               <input
+                 type="password"
+                 value={profileForm.confirmPassword}
+                 onChange={(event) => setProfileForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
+                 className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold outline-none focus:border-emerald-500"
+               />
+             </label>
+           </div>
+           {profileError && <p className="rounded-xl bg-red-50 text-red-600 p-3 text-xs font-bold">{profileError}</p>}
+           {profileMessage && <p className="rounded-xl bg-emerald-50 text-emerald-700 p-3 text-xs font-bold">{profileMessage}</p>}
+           <button
+             type="submit"
+             disabled={profileSaving}
+             className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white py-3 font-black text-sm disabled:opacity-60"
+           >
+             <Save size={16} /> {profileSaving ? "Menyimpan..." : "Simpan Perubahan"}
+           </button>
+         </motion.form>
+       </motion.div>
+      )}
+
       {activeTab === "nilai" && (
         <motion.div
           variants={staggerContainer}
@@ -2595,6 +2852,10 @@ const SiswaDashboard = () => {
               <div><p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Rata-rata</p><p className="text-2xl font-black text-emerald-800">{scoreInsights.average.toFixed(1)}</p></div>
               <div><p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Mapel terkuat</p><p className="truncate text-lg font-black text-emerald-800">{scoreInsights.subjects[0]?.subject || "-"}</p></div>
               <div><p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Jumlah ujian</p><p className="text-2xl font-black text-emerald-800">{myResults.length}</p></div>
+            </Card>
+            <Card className="mb-4 rounded-[1.5rem] border border-sky-100 bg-sky-50 p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-sky-700 mb-1">Pesan Pembinaan</p>
+              <p className="text-sm leading-relaxed font-semibold text-slate-700">{reportMessage}</p>
             </Card>
             <motion.div
               variants={fadeUp}

@@ -81,6 +81,57 @@ export const api = {
         throw new Error("Gagal Login: Username atau Password Salah");
     },
 
+    updateStudentProfile: async ({ id, username, oldPassword, newUsername, newPassword, fotoProfil, fotoPosisi }) => {
+        let verificationQuery = supabase
+            .from("users")
+            .select("id, username, password, role, foto_profil")
+            .eq("id", id)
+            .eq("username", username)
+            .limit(1);
+        if (newPassword) verificationQuery = verificationQuery.eq("password", oldPassword);
+        const { data: matches, error: verifyError } = await verificationQuery;
+
+        if (verifyError) throw new Error(verifyError.message);
+        if (!matches?.length || String(matches[0].role).toLowerCase() !== "siswa") {
+            throw new Error(newPassword ? "Password lama tidak valid." : "Data profil tidak valid.");
+        }
+
+        const payload = {};
+        if (newUsername && newUsername !== username) {
+            const { data: duplicate, error: duplicateError } = await supabase
+                .from("users")
+                .select("id")
+                .eq("username", newUsername)
+                .neq("id", id)
+                .limit(1);
+            if (duplicateError) throw new Error(duplicateError.message);
+            if (duplicate?.length) throw new Error("Username sudah digunakan.");
+            payload.username = newUsername;
+        }
+        if (newPassword) payload.password = newPassword;
+        if (fotoProfil !== undefined) payload.foto_profil = fotoProfil;
+        if (fotoPosisi) payload.foto_posisi = fotoPosisi;
+        if (!Object.keys(payload).length) return matches[0];
+
+        let { data, error } = await supabase
+            .from("users")
+            .update(payload)
+            .eq("id", id)
+            .select()
+            .limit(1);
+        if (error && fotoPosisi && (error.code === "42703" || error.code === "PGRST204")) {
+            delete payload.foto_posisi;
+            ({ data, error } = await supabase
+                .from("users")
+                .update(payload)
+                .eq("id", id)
+                .select()
+                .limit(1));
+        }
+        if (error) throw new Error(error.message);
+        return { ...(data?.[0] || matches[0]), ...payload, ...(fotoPosisi ? { foto_posisi: fotoPosisi } : {}) };
+    },
+
     // 2. READ (Tarik Data - Smart Limiting & Full Fetch)
     read: async (sheet, fetchAll = false) => {
         const tableName = sheet.toLowerCase();
