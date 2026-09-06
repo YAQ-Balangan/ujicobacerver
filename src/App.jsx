@@ -109,6 +109,7 @@ const AppRouter = () => {
               session.sisa_waktu,
               Number(session.pelanggaran || 0),
               session.status || "ACTIVE",
+              session.updated_at || null,
             );
             if (syncResult?.queued) {
               remainingSessions.push(session, ...sessionQueue.slice(index + 1));
@@ -178,6 +179,8 @@ const AppRouter = () => {
         } else {
         writeOfflineQueue(username, []);
         removeLegacyOfflineQueue(username);
+        localStorage.removeItem(`tadbira_siswa_nilai_${username}`);
+        window.dispatchEvent(new Event("offline-sync-complete"));
         console.log("Sinkronisasi sukses! Data offline berhasil dibersihkan.");
         }
       } catch (err) {

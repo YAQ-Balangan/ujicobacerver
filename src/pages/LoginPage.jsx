@@ -1,6 +1,6 @@
 // src/pages/LoginPage.jsx
 // KODE SESUDAH
-import React, { useState, useContext } from "react";
+import React, { useState, useContext, useEffect } from "react";
 import {
   User,
   Lock,
@@ -21,6 +21,17 @@ const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [branding, setBranding] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("tadbira_branding") || "{}"); } catch { return {}; }
+  });
+
+  useEffect(() => {
+    const refreshBranding = () => {
+      try { setBranding(JSON.parse(localStorage.getItem("tadbira_branding") || "{}")); } catch { setBranding({}); }
+    };
+    window.addEventListener("tadbira-branding-updated", refreshBranding);
+    return () => window.removeEventListener("tadbira-branding-updated", refreshBranding);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -45,20 +56,20 @@ const LoginPage = () => {
         <div className="flex flex-col items-center mb-6 text-center">
           <div className="w-16 h-16 flex items-center justify-center mb-4 rounded-2xl shadow-[4px_4px_8px_#cbd5e1,-4px_-4px_8px_#ffffff] bg-slate-100 p-2.5">
             <img
-              src={logoTADBIRA}
+              src={branding.logo || logoTADBIRA}
               alt="Logo TADBIRA"
               className="w-full h-full object-contain"
             />
           </div>
 
           <h1 className="text-xl font-black text-slate-700 tracking-tight">
-            TADBIRA
+            {branding.title || "TADBIRA"}
           </h1>
           <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mt-1.5">
             "Tata Kelola Digital Berbasis Akurasi"
           </p>
           <p className="text-[8px] font-bold text-amber-600 uppercase tracking-widest mt-1">
-            Online Based Test 2026
+            {branding.version || "Online Based Test 2026"}
           </p>
         </div>
 

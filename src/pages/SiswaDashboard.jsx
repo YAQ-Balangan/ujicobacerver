@@ -26,6 +26,10 @@ import {
   ShieldAlert,
   AlertTriangle,
   Info,
+  Wifi,
+  WifiOff,
+  ZoomIn,
+  ZoomOut,
   Maximize,
   X,
   BookMarked,
@@ -115,13 +119,11 @@ const formatTanggalLokal = (dateString) => {
 const fontClasses = {
   wacana: [
     "text-[14px] md:text-[16px]",
-    "text-[16px] md:text-[18px]",
     "text-[18px] md:text-[20px]",
   ],
-  soal: ["text-base md:text-lg", "text-lg md:text-xl", "text-xl md:text-2xl"],
+  soal: ["text-base md:text-lg", "text-xl md:text-2xl"],
   opsi: [
     "text-sm md:text-base",
-    "text-base md:text-lg",
     "text-lg md:text-xl",
   ],
 };
@@ -320,6 +322,7 @@ const SiswaDashboard = () => {
   const [isAcakSoalActive, setIsAcakSoalActive] = useState(true);
   const [isExamTimerActive, setIsExamTimerActive] = useState(true);
   const [isLocked, setIsLocked] = useState(false);
+  const [isDisqualified, setIsDisqualified] = useState(false);
   const [pelanggaran, setPelanggaran] = useState(0);
   const [isAntiCheatActive, setIsAntiCheatActive] = useState(true);
   const isAntiCheatActiveRef = useRef(true);
@@ -365,6 +368,9 @@ const SiswaDashboard = () => {
 
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [isConnectionNoticeVisible, setIsConnectionNoticeVisible] = useState(
+    true,
+  );
   const [customAlert, setCustomAlert] = useState({
     isOpen: false,
     type: "info",
@@ -448,17 +454,31 @@ const SiswaDashboard = () => {
     }
   }, [soalData]);
   useEffect(() => {
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
+    const handleOnline = () => {
+      setIsOffline(false);
+      setIsConnectionNoticeVisible(true);
+    };
+    const handleOffline = () => {
+      setIsOffline(true);
+      setIsConnectionNoticeVisible(true);
+    };
+    const handleOfflineSyncComplete = () => {
+      localStorage.removeItem(`tadbira_siswa_nilai_${userUsername}`);
+    };
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
+    window.addEventListener("offline-sync-complete", handleOfflineSyncComplete);
 
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
+      window.removeEventListener(
+        "offline-sync-complete",
+        handleOfflineSyncComplete,
+      );
     };
-  }, []);
+  }, [userUsername]);
 
   const userKelasFull = String(getVal(user, "Kelas") || "")
     .toUpperCase()
@@ -624,10 +644,13 @@ const SiswaDashboard = () => {
           "tadbira_siswa_jadwal",
           JSON.stringify(finalJadwal),
         );
-        localStorage.setItem(
-          `tadbira_siswa_nilai_${getVal(user, "Username")}`,
-          JSON.stringify(gabunganNilai), // INI JUGA UBAH JADI gabunganNilai
-        );
+        const cacheKey = `tadbira_siswa_nilai_${getVal(user, "Username")}`;
+        if (pendingNilai.length > 0 && pendingAfterSync.length === 0) {
+          localStorage.removeItem(cacheKey);
+          window.dispatchEvent(new Event("offline-sync-complete"));
+        } else {
+          localStorage.setItem(cacheKey, JSON.stringify(gabunganNilai));
+        }
       } catch (err) {
         // Jangan tampilkan pesan error merah jika siswa sudah punya data offline di HP-nya
         if (!isBackground && !localStorage.getItem("tadbira_siswa_jadwal")) {
@@ -780,25 +803,16 @@ const SiswaDashboard = () => {
           isProcessing = false;
         }, 2000);
       } else {
-        // TAHAP 3: KUNCI TANPA DISKUALIFIKASI
-        pelanggaranRef.current = Math.max(currentPelanggaran, 2);
+        // TAHAP 3: DISKUALIFIKASI, lalu simpan nilai terakhir otomatis.
+        pelanggaranRef.current = Math.max(currentPelanggaran, 3);
         isLockedRef.current = true;
-        setPelanggaran(2);
-        simpanStatusOffline(2, true);
-
-        await api.saveSesi(
-          username,
-          examId,
-          answersRef.current,
-          timeLeftRef.current,
-          2,
-          "LOCKED",
-        );
-        showAlert(
-          "warning",
-          "Ujian Terkunci",
-          "Sistem mendeteksi aktivitas yang tidak valid. Silakan tunggu pengawas untuk membuka kunci. Ujian tidak dinyatakan diskualifikasi.",
-        );
+        setPelanggaran(3);
+        simpanStatusOffline(3, true);
+        setIsDisqualified(true);
+        await executeEndExam(true, "Diskualifikasi", {
+          retainLockedScreen: true,
+          disqualified: true,
+        });
         setTimeout(() => {
           isProcessing = false;
         }, 2000);
@@ -990,10 +1004,6 @@ const SiswaDashboard = () => {
         if (!serverIsFreshUnlock) {
           return;
         }
-        if (localLockExists && Number(sesi.pelanggaran || 0) >= 2) {
-          return;
-        }
-
         isLockedRef.current = false;
         setIsLocked(false);
         localStorage.setItem(
@@ -1074,29 +1084,19 @@ const SiswaDashboard = () => {
         "Akses DITOLAK. Silakan periksa kembali token ujian Anda.",
       );
 
-    const studentName = String(getVal(user, "Nama") || "").trim().toUpperCase();
+    const normalizedExamMapel = String(examMapel).trim().toUpperCase();
     const examResults = myResults.filter((res) => {
-      const resultExamId = getVal(res, "ID_Ujian") || getVal(res, "id_ujian");
-      if (resultExamId !== undefined && resultExamId !== null && resultExamId !== "") {
-        return String(resultExamId) === String(examId);
-      }
-
-      // Older nilai tables do not have an exam identifier. Keep those results
-      // visible and enforce the best available match using student and subject.
-      const resultName = String(getVal(res, "Nama_Siswa") || getVal(res, "nama_siswa") || "")
-        .trim()
-        .toUpperCase();
       const resultMapel = String(getVal(res, "Mapel") || getVal(res, "mapel") || "")
         .trim()
         .toUpperCase();
-      return resultName === studentName && resultMapel === String(examMapel).trim().toUpperCase();
-    });
-    const completedAttempts = examResults.filter(
-      (res) =>
-        !String(getVal(res, "Status"))
+      return (
+        resultMapel === normalizedExamMapel &&
+        !String(getVal(res, "Status") || "")
           .toUpperCase()
-          .includes("DIBUKA_ULANG"),
-    );
+          .includes("DIBUKA_ULANG")
+      );
+    });
+    const completedAttempts = examResults;
     const recordedAttempts = examResults
       .map((result) => {
         const submissionId = String(
@@ -1109,6 +1109,12 @@ const SiswaDashboard = () => {
     const attemptNumber =
       Math.max(completedAttempts.length, ...recordedAttempts, 0) + 1;
     const latestResult = examResults[examResults.length - 1];
+    if (completedAttempts.length > 0)
+      return showAlert(
+        "warning",
+        "Mapel Sudah Selesai",
+        `Anda sudah memiliki nilai untuk mapel ${examMapel}. Satu mapel hanya dapat memiliki satu nilai.`,
+      );
     if (completedAttempts.length >= 3)
       return showAlert(
         "danger",
@@ -1394,7 +1400,11 @@ const SiswaDashboard = () => {
   };
 
   // 5. KALKULASI SKOR & SUBMIT (OFFLINE-FIRST)
-  const executeEndExam = async (isForced, forcedStatus = "Selesai") => {
+  const executeEndExam = async (
+    isForced,
+    forcedStatus = "Selesai",
+    { retainLockedScreen = false, disqualified = false } = {},
+  ) => {
     setIsSubmitting(true);
 
     // Hapus timer save yang masih nyangkut di background agar tidak membocorkan memori
@@ -1460,6 +1470,7 @@ const SiswaDashboard = () => {
         salah: salahCount,
         total_soal: totalSoal,
         status: forcedStatus,
+        updated_at: new Date().toISOString(),
         detail_jawaban: JSON.stringify(detailJawabanArray),
       };
 
@@ -1496,15 +1507,21 @@ const SiswaDashboard = () => {
         });
       }
 
-      // RESET STATE INTERFACE UJIAN & PINDAH KE TAB NILAI
-      // setIsSubmitting(false);
-      fullscreenGuardRef.current = false;
-      setActiveExam(null);
-      setAnswers({});
-      setRaguRagu({});
-      setCurrentSoalIndex(0);
-      setIsMobileDrawerOpen(false);
-      setActiveTab("nilai");
+      if (!retainLockedScreen) {
+        // Reset state interface ujian dan pindah ke tab nilai.
+        fullscreenGuardRef.current = false;
+        setActiveExam(null);
+        setAnswers({});
+        setRaguRagu({});
+        setCurrentSoalIndex(0);
+        setIsMobileDrawerOpen(false);
+        setActiveTab("nilai");
+      } else {
+        isLockedRef.current = true;
+        setIsLocked(true);
+        setIsDisqualified(disqualified);
+        setIsSubmitting(false);
+      }
 
       // 5. PICU SINKRONISASI KE SERVER CLOUD (Kirim Sinyal ke App.jsx)
       window.dispatchEvent(new Event("force-sync"));
@@ -1528,6 +1545,9 @@ const SiswaDashboard = () => {
         console.warn("Gagal keluar dari fullscreen.");
       }
 
+      if (disqualified) {
+        return;
+      }
       if (isForced) {
         showAlert(
           "info",
@@ -1736,7 +1756,7 @@ const SiswaDashboard = () => {
   }
 
   // ==============================================================
-  // TAMPILAN LOCK SCREEN (PELANGGARAN PERTAMA) + FITUR PIN OFFLINE
+  // TAMPILAN LOCK SCREEN (PELANGGARAN KEDUA/KETIGA) + FITUR PIN OFFLINE
   // ==============================================================
   if (isLocked) {
     return (
@@ -1765,27 +1785,41 @@ const SiswaDashboard = () => {
 
         <Lock size={80} className="text-red-500 mb-6 animate-pulse mt-10" />
         <h1 className="text-3xl md:text-5xl font-black mb-3 text-center tracking-tight">
-          UJIAN TERKUNCI
+          {isDisqualified ? "UJIAN DIDISKUALIFIKASI" : "UJIAN TERKUNCI"}
         </h1>
         <p className="text-center text-slate-300 max-w-lg text-sm md:text-base leading-relaxed mb-8">
-          Sistem mendeteksi Anda{" "}
-          <strong>keluar dari aplikasi / berpindah layar</strong>. Ini adalah
-          pelanggaran ke-{pelanggaranRef.current}. Silakan panggil pengawas
-          untuk membuka kunci agar Anda bisa melanjutkan ujian.
+          {isDisqualified ? (
+            <>
+              Pelanggaran ke-3 terdeteksi. Ujian ini telah didiskualifikasi dan
+              nilai terakhir Anda otomatis disimpan. Anda tidak dapat
+              melanjutkan ujian ini.
+            </>
+          ) : (
+            <>
+              Sistem mendeteksi Anda{" "}
+              <strong>keluar dari aplikasi / berpindah layar</strong>. Ini adalah
+              pelanggaran ke-{pelanggaranRef.current}. Silakan panggil pengawas
+              untuk membuka kunci agar Anda bisa melanjutkan ujian.
+            </>
+          )}
           <br />
           <br />
-          <strong className="text-amber-400 font-black tracking-widest text-xs uppercase animate-pulse block mb-4">
-            — WAKTU UJIAN ANDA TERUS BERJALAN —
-          </strong>
+          {!isDisqualified && (
+            <strong className="text-amber-400 font-black tracking-widest text-xs uppercase animate-pulse block mb-4">
+              — WAKTU UJIAN ANDA TERUS BERJALAN —
+            </strong>
+          )}
         </p>
 
-        {/* Indikator Menunggu Sinyal Server */}
-        <div className="flex gap-3 text-slate-400 font-bold text-xs uppercase tracking-widest items-center bg-slate-800 border border-slate-700 px-6 py-3.5 rounded-2xl shadow-lg mb-8">
-          <RefreshCw className="animate-spin text-amber-500" size={18} />{" "}
-          Menunggu Persetujuan Online...
-        </div>
+        {!isDisqualified && (
+          <div className="flex gap-3 text-slate-400 font-bold text-xs uppercase tracking-widest items-center bg-slate-800 border border-slate-700 px-6 py-3.5 rounded-2xl shadow-lg mb-8">
+            <RefreshCw className="animate-spin text-amber-500" size={18} />{" "}
+            Menunggu Persetujuan Online...
+          </div>
+        )}
 
         {/* FITUR BARU: PIN BUKA KUNCI DARURAT (OFFLINE) UNTUK GURU */}
+        {!isDisqualified && (
         <div className="w-full max-w-xs mt-4 pt-6 border-t border-slate-800/50 flex flex-col items-center">
           <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-3 text-center">
             Mode Darurat Gangguan Server
@@ -1804,6 +1838,7 @@ const SiswaDashboard = () => {
             }}
           />
         </div>
+        )}
       </div>
     );
   }
@@ -1864,61 +1899,39 @@ const SiswaDashboard = () => {
           <div className="flex items-center gap-1 md:gap-2 shrink-0">
             <div className="siswa-exam-font-controls flex items-center rounded-xl border border-slate-200 bg-slate-100 overflow-hidden shadow-sm">
               <button
-                onClick={() => setFontLevel((prev) => Math.max(0, prev - 1))}
-                disabled={fontLevel === 0}
-                className="h-9 w-9 md:h-10 md:w-10 flex items-center justify-center text-sm md:text-base font-black text-slate-600 hover:bg-slate-200 disabled:opacity-35 transition-colors"
-                title="Perkecil ukuran teks"
-                aria-label="Perkecil ukuran teks"
+                onClick={() => setFontLevel((prev) => (prev === 0 ? 1 : 0))}
+                className="h-9 min-w-16 px-2 md:h-10 md:min-w-20 flex items-center justify-center text-xs md:text-sm font-black text-slate-600 hover:bg-slate-200 transition-colors"
+                title={fontLevel === 0 ? "Gunakan teks besar" : "Gunakan teks normal"}
+                aria-label={fontLevel === 0 ? "Gunakan teks besar" : "Gunakan teks normal"}
               >
-                A<span className="text-[10px]">−</span>
-              </button>
-              <button
-                onClick={() => setFontLevel(0)}
-                className="h-9 min-w-9 px-1 md:h-10 md:min-w-10 flex items-center justify-center text-[10px] md:text-xs font-black text-emerald-600 border-x border-slate-200 hover:bg-slate-200 transition-colors"
-                title="Reset ukuran teks"
-                aria-label="Reset ukuran teks"
-              >
-                A
-              </button>
-              <button
-                onClick={() => setFontLevel((prev) => Math.min(2, prev + 1))}
-                disabled={fontLevel === 2}
-                className="h-9 w-9 md:h-10 md:w-10 flex items-center justify-center text-sm md:text-base font-black text-slate-600 hover:bg-slate-200 disabled:opacity-35 transition-colors"
-                title="Perbesar ukuran teks"
-                aria-label="Perbesar ukuran teks"
-              >
-                A<span className="text-[10px]">+</span>
+                A<span className="text-[10px]">{fontLevel === 0 ? "+" : "−"}</span>
               </button>
             </div>
 
             {/* Tombol Kontrol Zoom Tampilan */}
             <div className="siswa-exam-zoom-controls flex items-center bg-slate-100 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
               <button
-                onClick={() => setPageZoom((prev) => Math.max(0.9, prev - 0.05))}
-                className="h-9 w-8 md:h-10 md:w-9 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-colors font-black text-base"
-                title="Perkecil Tampilan (Ctrl -)"
+                onClick={() => setPageZoom((prev) => Math.max(0.1, prev - 0.1))}
+                disabled={pageZoom <= 0.1}
+                className="h-9 w-9 md:h-10 md:w-10 flex items-center justify-center text-slate-600 hover:bg-slate-200 disabled:opacity-35 transition-colors"
+                title="Perkecil tampilan"
+                aria-label="Perkecil tampilan"
               >
-                -
+                <ZoomOut size={16} />
               </button>
 
-              {pageZoom !== 1 ? (
-                <button
-                  onClick={() => setPageZoom(1)}
-                  className="h-9 min-w-10 px-1 md:h-10 md:min-w-12 flex items-center justify-center text-[10px] font-black text-emerald-600 hover:text-emerald-700 bg-slate-200/50"
-                  title="Reset Zoom (Ctrl 0)"
-                >
-                  {Math.round(pageZoom * 100)}%
-                </button>
-              ) : (
-                <div className="w-2 h-4 border-x border-slate-300"></div>
-              )}
+              <span className="h-9 min-w-10 px-1 md:h-10 md:min-w-12 flex items-center justify-center text-[10px] font-black text-emerald-600 border-x border-slate-200">
+                {Math.round(pageZoom * 100)}%
+              </span>
 
               <button
-                onClick={() => setPageZoom((prev) => Math.min(1.1, prev + 0.05))}
-                className="h-9 w-8 md:h-10 md:w-9 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-colors font-black text-base"
-                title="Perbesar Tampilan (Ctrl +)"
+                onClick={() => setPageZoom((prev) => Math.min(2, prev + 0.1))}
+                disabled={pageZoom >= 2}
+                className="h-9 w-9 md:h-10 md:w-10 flex items-center justify-center text-slate-600 hover:bg-slate-200 disabled:opacity-35 transition-colors"
+                title="Perbesar tampilan"
+                aria-label="Perbesar tampilan"
               >
-                +
+                <ZoomIn size={16} />
               </button>
             </div>
 
@@ -1983,26 +1996,6 @@ const SiswaDashboard = () => {
           </div>
         </header>
 
-        <AnimatePresence>
-          {isOffline && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="bg-red-500 text-white text-xs md:text-sm font-bold text-center py-2 px-4 shadow-md z-40 flex items-center justify-center gap-2"
-            >
-              <ShieldAlert size={16} className="animate-pulse" />
-              <br />
-              KONEKSI TERPUTUS!
-              <br />
-              Jangan tutup aplikasi. Jangan panik!, Jawaban tetap tersimpan.
-              <br />
-              Anda TETAP BISA melanjutkan ujian sambil menunggu internet stabil
-              kembali!.
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         <main className="flex-1 w-full max-w-[1440px] mx-auto p-2 md:p-5 flex flex-col justify-center z-10 relative pb-24 lg:pb-5">
           {loadingSoal ? (
             <div className="w-full max-w-5xl m-auto rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
@@ -2028,6 +2021,26 @@ const SiswaDashboard = () => {
                     <span className="bg-slate-800 text-white font-black px-3 py-1.5 lg:px-4 rounded-lg text-xs lg:text-sm shadow-sm">
                       SOAL NO. {currentSoalIndex + 1}
                     </span>
+                    {isConnectionNoticeVisible && (
+                      <div
+                        className={`flex max-w-[9rem] items-center gap-1 rounded-full border px-2 py-1.5 text-[10px] font-bold ${
+                          isOffline
+                            ? "border-red-200 bg-red-50 text-red-700"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        }`}
+                      >
+                        {isOffline ? <WifiOff size={13} /> : <Wifi size={13} />}
+                        <span className="truncate">{isOffline ? "Offline" : "Online"}</span>
+                        <button
+                          type="button"
+                          aria-label="Tutup status koneksi"
+                          onClick={() => setIsConnectionNoticeVisible(false)}
+                          className="rounded-full p-0.5 text-current/70 hover:bg-black/5 hover:text-current"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    )}
                     {getVal(currentSoal, "Poin") && (
                       <span className="bg-emerald-50 text-emerald-700 font-bold px-2 py-1.5 lg:px-3 rounded-lg text-[10px] lg:text-xs border border-emerald-200">
                         {getVal(currentSoal, "Poin")} POIN

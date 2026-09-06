@@ -454,7 +454,7 @@ const UjianDashboard = () => {
             dijawab: totalSoal,
             totalSoal: totalSoal,
             progress: 100,
-            status: isDisqualified ? "DISKUALIFIKASI" : "SELESAI",
+            status: isDisqualified ? "DISQUALIFIED" : "SELESAI",
           },
         });
       });
@@ -501,7 +501,12 @@ const UjianDashboard = () => {
               totalSoal > 0
                 ? Math.min(100, Math.round((dijawab / totalSoal) * 100))
                 : 0,
-            status: sesi.status === "LOCKED" ? "LOCKED" : "WORKING",
+            status:
+              sesi.status === "DISQUALIFIED"
+                ? "DISQUALIFIED"
+                : sesi.status === "LOCKED"
+                  ? "LOCKED"
+                  : "WORKING",
           },
         });
       });
@@ -587,7 +592,11 @@ const UjianDashboard = () => {
                   ? {
                       ...siswa,
                       status:
-                        dataBaru.status === "LOCKED" ? "LOCKED" : "WORKING",
+                        dataBaru.status === "DISQUALIFIED"
+                          ? "DISQUALIFIED"
+                          : dataBaru.status === "LOCKED"
+                            ? "LOCKED"
+                            : "WORKING",
                       pelanggaran: dataBaru.pelanggaran,
                       dijawab: dijawab, // Update indikator soal
                       progress:
@@ -981,7 +990,9 @@ const UjianDashboard = () => {
     );
   };
 
-  const lockedStudents = studentsData.filter((s) => s.status === "LOCKED");
+  const lockedStudents = studentsData.filter(
+    (s) => s.status === "LOCKED" || s.status === "DISQUALIFIED",
+  );
 
   // =================================================================================
   // RENDER UI DENAH / KELAS

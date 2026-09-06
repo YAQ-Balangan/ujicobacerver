@@ -1197,26 +1197,6 @@ const GuruDashboard = () => {
     }
   };
 
-  const handleReopenDisqualified = async (item) => {
-    try {
-      setLoading(true);
-      await api.update("Nilai", item.id, { status: "DIBUKA_ULANG" });
-      if (item.username && item.id_ujian) {
-        await api.deleteSesi(item.username, item.id_ujian);
-      }
-      await fetchData(false);
-      showAlert(
-        "success",
-        "Kesempatan Dibuka",
-        `Siswa ${item.nama_siswa || item.username} dapat menggunakan kesempatan berikutnya. Riwayat nilai tetap tersimpan.`,
-      );
-    } catch (error) {
-      showAlert("danger", "Gagal Membuka", error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const openAddModal = () => {
     setIsEdit(false);
     setFormData({ ...currentConfig.defaultValues });
@@ -1809,10 +1789,24 @@ Patuhi aturan berikut secara ketat:
   }, [tab, search, filters]);
 
   const lockedSessions = sesiUjianData.filter((s) => s.status === "LOCKED");
-  const disqualifiedSessions = processedData.filter(
-    (d) =>
-      tab === "nilai" && String(d.status).toLowerCase() === "diskualifikasi",
-  );
+  const disqualifiedSessions = [
+    ...processedData.filter(
+      (d) =>
+        tab === "nilai" && String(d.status).toLowerCase() === "diskualifikasi",
+    ),
+    ...sesiUjianData
+      .filter((s) => s.status === "DISQUALIFIED")
+      .map((s) => ({
+        ...s,
+        id: s.id_sesi,
+        username: s.username_siswa,
+        nama_siswa: s.username_siswa,
+        kelas: "-",
+        mapel: `Ujian #${s.id_ujian}`,
+        skor: "-",
+        status: "Diskualifikasi",
+      })),
+  ];
 
   const isAllSelected =
     processedData.length > 0 && selectedIds.length === processedData.length;
@@ -3687,8 +3681,8 @@ Patuhi aturan berikut secara ketat:
                         Riwayat Diskualifikasi
                       </h3>
                       <p className="text-slate-400 text-sm font-medium">
-                        Siswa di bawah ini ngeyel keluar aplikasi untuk kedua
-                        kalinya dan dihentikan paksa.
+                        Siswa di bawah ini melakukan pelanggaran untuk ketiga
+                        kalinya dan didiskualifikasi secara otomatis.
                       </p>
                     </div>
                   </div>
@@ -3745,13 +3739,6 @@ Patuhi aturan berikut secara ketat:
                                     title="Lihat Seberapa Jauh Ia Mengerjakan"
                                   >
                                     <Eye size={16} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleReopenDisqualified(item)}
-                                    className="px-3 py-2 bg-emerald-600 text-white hover:bg-emerald-500 rounded-lg transition-colors text-xs font-bold"
-                                    title="Buka satu kesempatan baru tanpa menghapus riwayat"
-                                  >
-                                    Buka Lagi
                                   </button>
                                 </div>
                               </td>

@@ -14,6 +14,32 @@
   box-sizing: border-box;
 }
 
+.sa-input {
+  display: block;
+  width: 100%;
+  min-height: 2.5rem;
+  margin-top: 0.35rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.75rem;
+  background: #fff;
+  padding: 0.6rem 0.75rem;
+  color: #172033;
+  font-size: 0.8125rem;
+  outline: none;
+}
+
+.sa-input:focus {
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgb(16 185 129 / 0.12);
+}
+
+@media (max-width: 639px) {
+  .sa-input {
+    min-height: 2.625rem;
+    font-size: 0.75rem;
+  }
+}
+
 button,
 input,
 select,

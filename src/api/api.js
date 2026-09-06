@@ -185,7 +185,7 @@ export const api = {
         for (let attempt = 0; attempt < 6; attempt += 1) {
             const { error } = await supabase
                 .from('nilai')
-                .insert([payload]);
+                .upsert([payload], { onConflict: 'id' });
 
             if (!error || error.code === '23505') return;
             const missingColumn = error.code === '42703' || error.code === 'PGRST204';
@@ -290,7 +290,7 @@ export const api = {
     // ========================================================
 
     // Auto-Save setiap 15 Detik & Saat Pindah Soal (Optimasi Jalur Kilat 300 Siswa)
-    saveSesi: async (username, idUjian, jawaban, sisaWaktu, pelanggaran = 0, statusSesi = 'ACTIVE') => {
+    saveSesi: async (username, idUjian, jawaban, sisaWaktu, pelanggaran = 0, statusSesi = 'ACTIVE', updatedAt = null) => {
         const idSesi = `${username}_${idUjian}`;
         return enqueueSessionWrite(idSesi, async () => {
           const payload = {
@@ -301,12 +301,26 @@ export const api = {
               sisa_waktu: sisaWaktu,
               pelanggaran,
               status: statusSesi,
-              updated_at: new Date().toISOString(),
+              updated_at: updatedAt || new Date().toISOString(),
           };
 
           if (!navigator.onLine) {
               enqueueOfflineSession(payload);
               return { queued: true };
+          }
+
+          const { data: currentSession, error: readError } = await supabase
+              .from('sesi_ujian')
+              .select('updated_at')
+              .eq('id_sesi', idSesi)
+              .maybeSingle();
+
+          if (readError) throw new Error(readError.message);
+          if (
+              currentSession?.updated_at &&
+              new Date(currentSession.updated_at).getTime() > new Date(payload.updated_at).getTime()
+          ) {
+              return { queued: false, skippedAsStale: true };
           }
 
           const { error } = await supabase
@@ -356,7 +370,7 @@ export const api = {
         const { data, error } = await supabase
             .from('sesi_ujian')
             .select('id_sesi, username_siswa, id_ujian, status, pelanggaran, updated_at')
-            .eq('status', 'LOCKED');
+            .in('status', ['LOCKED', 'DISQUALIFIED']);
 
         if (error) throw new Error(error.message);
         return data || [];

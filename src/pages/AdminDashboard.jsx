@@ -322,6 +322,7 @@ const MENU_ITEMS = [
 // ==========================================
 import EditableCell from "../components/ui/EditableCell";
 import { findSetting, isSettingEnabled } from "../utils/settings";
+import SuperAdminPanel from "./SuperAdminPanel";
 
 // ==========================================
 // KOMPONEN UTAMA
@@ -346,6 +347,35 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
   const [filters, setFilters] = useState({});
   const [sortConfig, setSortConfig] = useState({ key: "id", direction: "asc" });
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const [superAdminUnlocked, setSuperAdminUnlocked] = useState(false);
+  const [superAdminPrompt, setSuperAdminPrompt] = useState(false);
+  const [superAdminPassword, setSuperAdminPassword] = useState("");
+  const [superAdminError, setSuperAdminError] = useState("");
+
+  const requestSuperAdmin = () => {
+    setSuperAdminPassword("");
+    setSuperAdminError("");
+    setSuperAdminPrompt(true);
+  };
+
+  const unlockSuperAdmin = (event) => {
+    event.preventDefault();
+    if (superAdminPassword !== "2001") {
+      setSuperAdminError("Password pusat kontrol tidak valid.");
+      return;
+    }
+    setSuperAdminPrompt(false);
+    setSuperAdminUnlocked(true);
+  };
+
+  useEffect(() => {
+    if (!superAdminPrompt) return undefined;
+    const preventEscape = (event) => {
+      if (event.key === "Escape") event.preventDefault();
+    };
+    document.addEventListener("keydown", preventEscape);
+    return () => document.removeEventListener("keydown", preventEscape);
+  }, [superAdminPrompt]);
 
   const [customAlert, setCustomAlert] = useState({
     isOpen: false,
@@ -995,7 +1025,7 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
   };
 
   return (
-    <Dashboard menu={MENU_ITEMS} active={tab} setActive={setTab}>
+    <Dashboard menu={MENU_ITEMS} active={tab} setActive={setTab} onLogoTripleClick={requestSuperAdmin}>
       <style>{`
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
@@ -1003,7 +1033,9 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       `}</style>
 
-      <div className="admin-dashboard space-y-3 max-w-[1440px] mx-auto pb-20 relative">
+      {superAdminUnlocked ? (
+        <SuperAdminPanel onBack={() => setSuperAdminUnlocked(false)} />
+      ) : <div className="admin-dashboard space-y-3 max-w-[1440px] mx-auto pb-20 relative">
         <div className="md:hidden flex flex-col gap-2 px-2 pt-1">
           <div className="flex h-14 items-center justify-between rounded-xl bg-gradient-to-r from-slate-900 to-slate-800 px-3 text-white shadow-sm">
             <div className="flex min-w-0 items-center gap-2">
@@ -1013,7 +1045,7 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
                 <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
                   Total data: <span className="text-emerald-400">{processedData.length}</span>
                 </p>
-              </div>
+                     </div>
             </div>
             <button
               onClick={() => refreshCurrentTab(false)}
@@ -1346,7 +1378,20 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
             </div>
           )}
         </AnimatePresence>
-      </div>
+      </div>}
+      {superAdminPrompt && (
+        <div className="fixed inset-0 z-[100] flex min-h-screen items-center justify-center bg-slate-950 p-4" role="dialog" aria-modal="true" aria-labelledby="super-admin-lock-title">
+          <form onSubmit={unlockSuperAdmin} className="w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-6 text-white shadow-2xl">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-400"><Lock size={25} /></div>
+            <h2 id="super-admin-lock-title" className="mt-4 text-center text-lg font-black">Layar Terkunci</h2>
+            <p className="mt-1 text-center text-xs text-slate-400">Masukkan password pusat kontrol untuk melanjutkan.</p>
+            <input autoFocus type="password" value={superAdminPassword} onChange={(event) => setSuperAdminPassword(event.target.value)} className="mt-5 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-3 text-center text-lg tracking-[0.35em] text-white outline-none focus:border-emerald-500" placeholder="Password" aria-label="Password pusat kontrol" />
+            {superAdminError && <p className="mt-2 text-center text-xs font-bold text-red-400">{superAdminError}</p>}
+            <button type="submit" className="mt-5 w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white transition hover:bg-emerald-500">Buka Pusat Kontrol</button>
+            <p className="mt-4 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500">Akses dibatasi</p>
+          </form>
+        </div>
+      )}
     </Dashboard>
   );
 };
