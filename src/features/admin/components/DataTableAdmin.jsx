@@ -2,6 +2,7 @@ import React from "react";
 import { ChevronUp, ChevronDown, ArrowUpDown, Trash2, Files, Share2 } from "lucide-react";
 import { Card, TableSkeleton } from "../../../components/ui/Ui";
 import EditableCell from "../../../components/ui/EditableCell";
+import UserProfileAvatar from "../../../components/ui/UserProfileAvatar";
 
 export default function DataTableAdmin({
   currentConfig,
@@ -137,34 +138,44 @@ return (
                         style={{ ...stickyStyle, ...getColumnStyle(col.key) }}
                         className={`px-2 py-2 font-semibold text-sm text-slate-700 ${isScheduleTable ? "whitespace-normal break-words align-top" : ""} ${isID ? "border-r border-slate-100 bg-inherit" : ""} ${isName ? "border-r border-slate-100 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.03)] bg-inherit" : ""}`}
                       >
-                        <EditableCell
-                          item={item}
-                          column={
-                            col.key === "mapel" && tab === "jadwal"
-                              ? {
-                                  ...col,
-                                  options: [
-                                    ...new Set(
-                                      allData.mapel
-                                        .map((m) => m.nama_mapel)
-                                        .filter(Boolean),
-                                    ),
-                                  ],
-                                }
-                              : col.isCombobox
+                        <div className="flex items-center gap-2">
+                          {tab === "siswa" && isName && (
+                            <UserProfileAvatar
+                              src={item.foto_profil}
+                              position={item.foto_posisi}
+                              name={item.nama}
+                              gender={item.jenis_kelamin || item.gender}
+                            />
+                          )}
+                          <EditableCell
+                            item={item}
+                            column={
+                              col.key === "mapel" && tab === "jadwal"
                                 ? {
                                     ...col,
                                     options: [
-                                      ...new Set([
-                                        ...col.options,
-                                        ...getFilterOptions(col.key),
-                                      ]),
+                                      ...new Set(
+                                        allData.mapel
+                                          .map((m) => m.nama_mapel)
+                                          .filter(Boolean),
+                                      ),
                                     ],
                                   }
-                                : col
-                          }
-                          onSave={handleSaveCell}
-                        />
+                                : col.isCombobox
+                                  ? {
+                                      ...col,
+                                      options: [
+                                        ...new Set([
+                                          ...col.options,
+                                          ...getFilterOptions(col.key),
+                                        ]),
+                                      ],
+                                    }
+                                  : col
+                            }
+                            onSave={handleSaveCell}
+                          />
+                        </div>
                       </td>
                     );
                   })}

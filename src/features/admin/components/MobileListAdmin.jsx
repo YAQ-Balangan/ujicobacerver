@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { TableSkeleton } from "../../../components/ui/Ui";
 import { RefreshCw, Trash2 } from "lucide-react";
 import EditableCell from "../../../components/ui/EditableCell";
+import UserProfileAvatar from "../../../components/ui/UserProfileAvatar";
 
 export default function MobileListAdmin({
   processedData,
@@ -80,6 +81,14 @@ function MobileDataRow({
           aria-expanded={expanded}
         >
           <EditableCell item={item} column={columns[0]} onSave={handleSaveCell} />
+          {tab === "siswa" && (
+            <UserProfileAvatar
+              src={item.foto_profil}
+              position={item.foto_posisi}
+              name={item.nama}
+              gender={item.jenis_kelamin || item.gender}
+            />
+          )}
           <div className="min-w-0 flex-1">
             <div className="truncate text-[13px] font-black text-slate-800">
               <EditableCell item={item} column={nameColumn} onSave={handleSaveCell} />

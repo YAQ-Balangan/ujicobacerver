@@ -69,6 +69,11 @@ const SettingToggle = ({ label, description, checked, onClick, icon: Icon }) => 
   </button>
 );
 
+const SEMESTER_OPTIONS = [
+  { label: "2026/2027 - Ganjil", value: "2026/2027 - Ganjil" },
+  { label: "2026/2027 - Genap", value: "2026/2027 - Genap" },
+];
+
 const CompactSettingToggle = ({ label, checked, onClick, icon: Icon }) => (
   <button
     type="button"
@@ -223,6 +228,7 @@ const TAB_CONFIG = {
         label: "Kelas",
         isSelect: true,
         options: OPSI_KELAS_SISWA,
+        allowCustom: true,
         sortable: true,
         filterable: true,
       },
@@ -256,6 +262,7 @@ const TAB_CONFIG = {
         label: "Target Kelas",
         isMultiSelect: true,
         options: OPSI_KELAS_LENGKAP,
+        allowCustom: true,
         sortable: true,
         filterable: true,
       },
@@ -292,10 +299,37 @@ const TAB_CONFIG = {
         label: "Kelas",
         isMultiSelect: true,
         options: OPSI_KELAS_LENGKAP,
+        allowCustom: true,
         sortable: true,
         filterable: true,
       },
+      { key: "semester", label: "Semester", isCombobox: true, options: SEMESTER_OPTIONS.map((item) => item.value), sortable: true, filterable: true },
       { key: "guru_pengampu", label: "Guru", sortable: true, filterable: true },
+    ],
+  },
+  semester: {
+    sheet: "academic_terms",
+    title: "Manajemen Semester",
+    subtitle: "Tahun ajaran dan semester aktif",
+    columns: [
+    { key: "id", label: "ID", isNumber: true, sortable: true },
+    { key: "tahun_ajaran", label: "Tahun Ajaran", sortable: true },
+    {
+      key: "semester",
+      label: "Semester",
+      isSelect: true,
+      options: ["Ganjil", "Genap"],
+      sortable: true,
+      filterable: true,
+    },
+    {
+      key: "status",
+      label: "Status",
+      isSelect: true,
+      options: ["Aktif", "Arsip"],
+      sortable: true,
+      filterable: true,
+    },
     ],
   },
   settings: {
@@ -314,6 +348,7 @@ const MENU_ITEMS = [
   { id: "siswa", label: "Manajemen User", icon: ShieldCheck },
   { id: "jadwal", label: "Jadwal Ujian", icon: Calendar },
   { id: "mapel", label: "Mata Pelajaran", icon: BookMarked },
+  { id: "semester", label: "Semester", icon: Calendar },
   { id: "settings", label: "Konfigurasi", icon: Settings },
 ];
 
@@ -322,7 +357,6 @@ const MENU_ITEMS = [
 // ==========================================
 import EditableCell from "../components/ui/EditableCell";
 import { findSetting, isSettingEnabled } from "../utils/settings";
-import SuperAdminPanel from "./SuperAdminPanel";
 
 // ==========================================
 // KOMPONEN UTAMA
@@ -335,6 +369,7 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
     siswa: [],
     jadwal: [],
     mapel: [],
+    semester: [],
     settings: [],
   });
 
@@ -347,35 +382,6 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
   const [filters, setFilters] = useState({});
   const [sortConfig, setSortConfig] = useState({ key: "id", direction: "asc" });
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
-  const [superAdminUnlocked, setSuperAdminUnlocked] = useState(false);
-  const [superAdminPrompt, setSuperAdminPrompt] = useState(false);
-  const [superAdminPassword, setSuperAdminPassword] = useState("");
-  const [superAdminError, setSuperAdminError] = useState("");
-
-  const requestSuperAdmin = () => {
-    setSuperAdminPassword("");
-    setSuperAdminError("");
-    setSuperAdminPrompt(true);
-  };
-
-  const unlockSuperAdmin = (event) => {
-    event.preventDefault();
-    if (superAdminPassword !== "2001") {
-      setSuperAdminError("Password pusat kontrol tidak valid.");
-      return;
-    }
-    setSuperAdminPrompt(false);
-    setSuperAdminUnlocked(true);
-  };
-
-  useEffect(() => {
-    if (!superAdminPrompt) return undefined;
-    const preventEscape = (event) => {
-      if (event.key === "Escape") event.preventDefault();
-    };
-    document.addEventListener("keydown", preventEscape);
-    return () => document.removeEventListener("keydown", preventEscape);
-  }, [superAdminPrompt]);
 
   const [customAlert, setCustomAlert] = useState({
     isOpen: false,
@@ -398,6 +404,7 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
       const cachedJadwal = localStorage.getItem("tadbira_admin_jadwal");
       const cachedMapel = localStorage.getItem("tadbira_admin_mapel");
       const cachedSettings = localStorage.getItem("tadbira_admin_settings");
+      const cachedSemester = localStorage.getItem("tadbira_admin_semester");
 
       if (cachedSiswa || cachedJadwal || cachedMapel || cachedSettings) {
         setAllData((prev) => ({
@@ -405,6 +412,7 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
           siswa: cachedSiswa ? JSON.parse(cachedSiswa) : [],
           jadwal: cachedJadwal ? JSON.parse(cachedJadwal) : [],
           mapel: cachedMapel ? JSON.parse(cachedMapel) : [],
+          semester: cachedSemester ? JSON.parse(cachedSemester) : [],
           settings: cachedSettings ? JSON.parse(cachedSettings) : [],
         }));
       }
@@ -417,10 +425,11 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
     // 2. FASE ONLINE (SINKRONISASI DATA SERVER)
     // =======================================================
     try {
-      const [resSiswa, resJadwal, resMapel, resSettings] = await Promise.all([
+      const [resSiswa, resJadwal, resMapel, resSemester, resSettings] = await Promise.all([
         api.read(TAB_CONFIG.siswa.sheet),
         api.read(TAB_CONFIG.jadwal.sheet),
         api.read(TAB_CONFIG.mapel.sheet),
+        api.read("academic_terms").catch(() => []),
         api.read(TAB_CONFIG.settings.sheet),
       ]);
 
@@ -428,6 +437,7 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
         siswa: resSiswa || [],
         jadwal: resJadwal || [],
         mapel: resMapel || [],
+        semester: resSemester || [],
         settings: resSettings || [],
       };
 
@@ -448,6 +458,7 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
         "tadbira_admin_mapel",
         JSON.stringify(newData.mapel),
       );
+      localStorage.setItem("tadbira_admin_semester", JSON.stringify(newData.semester));
       localStorage.setItem(
         "tadbira_admin_settings",
         JSON.stringify(newData.settings),
@@ -553,6 +564,10 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
       newRow.acak_soal = "ACAK";
       newRow.durasi_menit = 90;
       newRow.tanggal = new Date().toISOString().split("T")[0];
+    }
+    if (tab === "semester") {
+      newRow.semester = "Ganjil";
+      newRow.status = "Aktif";
     }
     setAllData((prev) => ({ ...prev, [tab]: [...prev[tab], newRow] }));
   };
@@ -1025,7 +1040,7 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
   };
 
   return (
-    <Dashboard menu={MENU_ITEMS} active={tab} setActive={setTab} onLogoTripleClick={requestSuperAdmin}>
+    <Dashboard menu={MENU_ITEMS} active={tab} setActive={setTab}>
       <style>{`
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
@@ -1033,9 +1048,7 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       `}</style>
 
-      {superAdminUnlocked ? (
-        <SuperAdminPanel onBack={() => setSuperAdminUnlocked(false)} />
-      ) : <div className="admin-dashboard space-y-3 max-w-[1440px] mx-auto pb-20 relative">
+      <div className="admin-dashboard space-y-3 max-w-[1440px] mx-auto pb-20 relative">
         <div className="md:hidden flex flex-col gap-2 px-2 pt-1">
           <div className="flex h-14 items-center justify-between rounded-xl bg-gradient-to-r from-slate-900 to-slate-800 px-3 text-white shadow-sm">
             <div className="flex min-w-0 items-center gap-2">
@@ -1045,7 +1058,7 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
                 <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
                   Total data: <span className="text-emerald-400">{processedData.length}</span>
                 </p>
-                     </div>
+              </div>
             </div>
             <button
               onClick={() => refreshCurrentTab(false)}
@@ -1209,6 +1222,7 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
           {tab === "siswa" && <TabSiswa {...tabProps} />}
           {tab === "jadwal" && <TabJadwal {...tabProps} />}
           {tab === "mapel" && <TabMapel {...tabProps} />}
+          {tab === "semester" && <TabSettings {...tabProps} />}
           {tab === "settings" && <TabSettings {...tabProps} />}
         </React.Suspense>
 
@@ -1378,20 +1392,7 @@ const AdminDashboard = ({ initialTab = "siswa" }) => {
             </div>
           )}
         </AnimatePresence>
-      </div>}
-      {superAdminPrompt && (
-        <div className="fixed inset-0 z-[100] flex min-h-screen items-center justify-center bg-slate-950 p-4" role="dialog" aria-modal="true" aria-labelledby="super-admin-lock-title">
-          <form onSubmit={unlockSuperAdmin} className="w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-6 text-white shadow-2xl">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-400"><Lock size={25} /></div>
-            <h2 id="super-admin-lock-title" className="mt-4 text-center text-lg font-black">Layar Terkunci</h2>
-            <p className="mt-1 text-center text-xs text-slate-400">Masukkan password pusat kontrol untuk melanjutkan.</p>
-            <input autoFocus type="password" value={superAdminPassword} onChange={(event) => setSuperAdminPassword(event.target.value)} className="mt-5 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-3 text-center text-lg tracking-[0.35em] text-white outline-none focus:border-emerald-500" placeholder="Password" aria-label="Password pusat kontrol" />
-            {superAdminError && <p className="mt-2 text-center text-xs font-bold text-red-400">{superAdminError}</p>}
-            <button type="submit" className="mt-5 w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white transition hover:bg-emerald-500">Buka Pusat Kontrol</button>
-            <p className="mt-4 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500">Akses dibatasi</p>
-          </form>
-        </div>
-      )}
+      </div>
     </Dashboard>
   );
 };

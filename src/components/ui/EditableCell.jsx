@@ -26,6 +26,7 @@ const EditableCell = ({ item, column, onSave }) => {
             onChange={(newVal) => setVal(newVal)}
             options={column.options}
             placeholder="Pilih Kelas..."
+            allowCustom={column.allowCustom}
           />
           <div className="flex gap-1 mt-1">
             <button

@@ -99,6 +99,15 @@ const getVal = (obj, keyName) => {
   return foundKey ? obj[foundKey] : "";
 };
 
+const parseFotoPosisi = (position) => {
+  const [horizontal = "50%", vertical = "50%"] = String(position || "").split(/\s+/);
+  const toPercent = (value) => {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? Math.min(100, Math.max(0, parsed)) : 50;
+  };
+  return { horizontal: toPercent(horizontal), vertical: toPercent(vertical) };
+};
+
 const formatTanggalLokal = (dateString) => {
   if (!dateString) return "Hari ini";
   try {
@@ -759,7 +768,8 @@ const SiswaDashboard = () => {
       };
       // ------------------------------------------------------
 
-      if (currentPelanggaran === 0) {
+      try {
+       if (currentPelanggaran === 0) {
         // TAHAP 1: PERINGATAN SAJA (Toleransi 1x)
         pelanggaranRef.current = 1;
         setPelanggaran(1);
@@ -779,10 +789,7 @@ const SiswaDashboard = () => {
           1,
           "ACTIVE",
         );
-        setTimeout(() => {
-          isProcessing = false;
-        }, 3000);
-      } else if (currentPelanggaran === 1) {
+       } else if (currentPelanggaran === 1) {
         // TAHAP 2: TERKUNCI (Harus dibuka oleh Guru)
         pelanggaranRef.current = 2;
         isLockedRef.current = true;
@@ -799,10 +806,7 @@ const SiswaDashboard = () => {
           2,
           "LOCKED",
         );
-        setTimeout(() => {
-          isProcessing = false;
-        }, 2000);
-      } else {
+       } else {
         // TAHAP 3: DISKUALIFIKASI, lalu simpan nilai terakhir otomatis.
         pelanggaranRef.current = Math.max(currentPelanggaran, 3);
         isLockedRef.current = true;
@@ -813,9 +817,13 @@ const SiswaDashboard = () => {
           retainLockedScreen: true,
           disqualified: true,
         });
+       }
+      } catch (error) {
+        console.error("Gagal menyinkronkan status anti-cheat:", error);
+      } finally {
         setTimeout(() => {
           isProcessing = false;
-        }, 2000);
+        }, currentPelanggaran === 0 ? 3000 : 2000);
       }
     };
 
@@ -2737,7 +2745,7 @@ const SiswaDashboard = () => {
              <div className="w-24 h-24">
               <div className="w-full h-full rounded-full overflow-hidden bg-emerald-50 border-4 border-white shadow-md flex items-center justify-center text-3xl font-black text-emerald-700">
                {profileForm.fotoProfil !== null && (profileForm.fotoProfil || getVal(user, "foto_profil")) ? (
-                 <img src={profileForm.fotoProfil || getVal(user, "foto_profil")} alt="Foto profil" className="w-full h-full object-cover" style={{ objectPosition: profileForm.fotoPosisi }} />
+                 <img src={profileForm.fotoProfil || getVal(user, "foto_profil")} alt="Foto profil" className="h-full w-full object-cover" style={{ objectPosition: `${parseFotoPosisi(profileForm.fotoPosisi).horizontal}% ${parseFotoPosisi(profileForm.fotoPosisi).vertical}%`, transform: "scale(1.2)" }} />
                ) : (
                  getVal(user, "Nama")?.charAt(0)?.toUpperCase() || "S"
                )}
@@ -2758,8 +2766,14 @@ const SiswaDashboard = () => {
              {(profileForm.fotoProfil || getVal(user, "foto_profil")) && (
                <div className="w-full max-w-xs space-y-2">
                  <label className="block text-[10px] font-black text-slate-500 uppercase">Reposisi foto</label>
-                 <input aria-label="Posisi horizontal foto" type="range" min="0" max="100" value={Number(profileForm.fotoPosisi.split(" ")[0].replace("%", ""))} onChange={(event) => setProfileForm((prev) => ({ ...prev, fotoPosisi: `${event.target.value}% ${prev.fotoPosisi.split(" ")[1]}` }))} className="w-full accent-emerald-600" />
-                 <input aria-label="Posisi vertikal foto" type="range" min="0" max="100" value={Number(profileForm.fotoPosisi.split(" ")[1].replace("%", ""))} onChange={(event) => setProfileForm((prev) => ({ ...prev, fotoPosisi: `${prev.fotoPosisi.split(" ")[0]} ${event.target.value}%` }))} className="w-full accent-emerald-600" />
+                 <label className="block text-[10px] font-bold text-slate-500">
+                   Horizontal
+                   <input aria-label="Posisi horizontal foto" type="range" min="0" max="100" value={parseFotoPosisi(profileForm.fotoPosisi).horizontal} onChange={(event) => setProfileForm((prev) => ({ ...prev, fotoPosisi: `${event.target.value}% ${parseFotoPosisi(prev.fotoPosisi).vertical}%` }))} className="mt-1 w-full accent-emerald-600" />
+                 </label>
+                 <label className="block text-[10px] font-bold text-slate-500">
+                   Vertikal
+                   <input aria-label="Posisi vertikal foto" type="range" min="0" max="100" value={parseFotoPosisi(profileForm.fotoPosisi).vertical} onChange={(event) => setProfileForm((prev) => ({ ...prev, fotoPosisi: `${parseFotoPosisi(prev.fotoPosisi).horizontal}% ${event.target.value}%` }))} className="mt-1 w-full accent-emerald-600" />
+                 </label>
                  <p className="text-[10px] text-slate-400 text-center">Geser dua pengatur untuk menyesuaikan posisi wajah.</p>
                </div>
              )}

@@ -1,5 +1,5 @@
 // src/components/layout/Dashboard.jsx
-import React, { useState, useContext, useEffect, useRef } from "react";
+import React, { useState, useContext, useEffect } from "react";
 import { LogOut, Menu } from "lucide-react";
 import { AuthContext } from "../../context/AuthContext";
 import { Badge } from "../ui/Ui";
@@ -10,34 +10,9 @@ const Dashboard = ({
   menu = [],
   active,
   setActive,
-  onLogoTripleClick,
 }) => {
   const { user, logout } = useContext(AuthContext);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const logoClicks = useRef(0);
-  const logoClickTimer = useRef(null);
-  const [branding, setBranding] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("tadbira_branding") || "{}"); } catch { return {}; }
-  });
-
-  useEffect(() => {
-    const applyBranding = () => {
-      try { setBranding(JSON.parse(localStorage.getItem("tadbira_branding") || "{}")); } catch { setBranding({}); }
-    };
-    window.addEventListener("tadbira-branding-updated", applyBranding);
-    return () => window.removeEventListener("tadbira-branding-updated", applyBranding);
-  }, []);
-
-  const handleLogoClick = () => {
-    if (!onLogoTripleClick) return;
-    logoClicks.current += 1;
-    clearTimeout(logoClickTimer.current);
-    logoClickTimer.current = setTimeout(() => { logoClicks.current = 0; }, 700);
-    if (logoClicks.current === 3) {
-      logoClicks.current = 0;
-      onLogoTripleClick();
-    }
-  };
 
   useEffect(() => {
     if (!mobileOpen) return undefined;
@@ -67,20 +42,17 @@ const Dashboard = ({
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 flex items-center justify-center shrink-0 rounded-2xl border border-sky-100 bg-white p-2 shadow-[0_8px_18px_rgba(14,116,144,0.12)]">
               <img
-                src={branding.logo || logoMasda}
+                src={logoMasda}
                 alt="Logo TADBIRA"
                 className="w-full h-full object-contain"
-                onClick={handleLogoClick}
-                role={onLogoTripleClick ? "button" : undefined}
-                title={onLogoTripleClick ? "Klik 3 kali untuk pusat kontrol" : undefined}
               />
             </div>
             <div>
               <h2 className="text-xl font-black text-slate-800 tracking-tight">
-                {branding.title || "TADBIRA"}
+                TADBIRA
               </h2>
               <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest leading-none mt-1.5">
-                {branding.version || "Version 1.0"}
+                Version 1.0
               </p>
             </div>
           </div>

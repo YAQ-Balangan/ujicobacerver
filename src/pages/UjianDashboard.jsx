@@ -35,7 +35,28 @@ import { api, supabase } from "../api/api";
 // ==========================================
 // 1. KOMPONEN AVATAR CSS CUSTOM
 // ==========================================
-const CustomAvatar = ({ gender, isDisqualified }) => {
+const CustomAvatar = ({ gender, isDisqualified, fotoProfil, fotoPosisi }) => {
+  if (fotoProfil) {
+    return (
+      <div
+        className="relative h-[140px] w-[110px] overflow-hidden rounded-full border-4 border-white bg-slate-100 shadow-xl"
+        style={{ transform: "scale(0.58)", marginBottom: "-15px" }}
+      >
+        <img
+          src={fotoProfil}
+          alt="Foto profil siswa"
+          className="h-full w-full object-cover"
+          style={{ objectPosition: fotoPosisi || "50% 50%" }}
+        />
+        {isDisqualified && (
+          <div className="absolute inset-0 flex items-center justify-center bg-red-950/60 text-5xl font-black text-red-200">
+            X
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const isBoy = !String(gender || "")
     .toUpperCase()
     .startsWith("P");
@@ -299,6 +320,8 @@ const UjianDashboard = () => {
           .startsWith("P")
           ? "P"
           : "L",
+        fotoProfil: String(u.foto_profil || u.Foto_Profil || ""),
+        fotoPosisi: String(u.foto_posisi || u.Foto_Posisi || "50% 50%"),
         role: String(u.role || u.Role || "").toLowerCase(),
       }));
 
@@ -451,10 +474,12 @@ const UjianDashboard = () => {
             mapel: nilai.mapel || jadwalMap[idUjian] || "Ujian",
             nama: userObj ? userObj.nama : nilai.nama_siswa,
             gender: userObj ? userObj.gender : "L",
+            fotoProfil: userObj?.fotoProfil || "",
+            fotoPosisi: userObj?.fotoPosisi || "50% 50%",
             dijawab: totalSoal,
             totalSoal: totalSoal,
             progress: 100,
-            status: isDisqualified ? "DISQUALIFIED" : "SELESAI",
+            status: isDisqualified ? "DISKUALIFIKASI" : "SELESAI",
           },
         });
       });
@@ -495,18 +520,15 @@ const UjianDashboard = () => {
             mapel: mapel,
             nama: userObj ? userObj.nama : sesi.username_siswa,
             gender: userObj ? userObj.gender : "L",
+            fotoProfil: userObj?.fotoProfil || "",
+            fotoPosisi: userObj?.fotoPosisi || "50% 50%",
             dijawab: dijawab,
             totalSoal: totalSoal,
             progress:
               totalSoal > 0
                 ? Math.min(100, Math.round((dijawab / totalSoal) * 100))
                 : 0,
-            status:
-              sesi.status === "DISQUALIFIED"
-                ? "DISQUALIFIED"
-                : sesi.status === "LOCKED"
-                  ? "LOCKED"
-                  : "WORKING",
+            status: sesi.status === "LOCKED" ? "LOCKED" : "WORKING",
           },
         });
       });
@@ -592,11 +614,7 @@ const UjianDashboard = () => {
                   ? {
                       ...siswa,
                       status:
-                        dataBaru.status === "DISQUALIFIED"
-                          ? "DISQUALIFIED"
-                          : dataBaru.status === "LOCKED"
-                            ? "LOCKED"
-                            : "WORKING",
+                        dataBaru.status === "LOCKED" ? "LOCKED" : "WORKING",
                       pelanggaran: dataBaru.pelanggaran,
                       dijawab: dijawab, // Update indikator soal
                       progress:
@@ -990,9 +1008,7 @@ const UjianDashboard = () => {
     );
   };
 
-  const lockedStudents = studentsData.filter(
-    (s) => s.status === "LOCKED" || s.status === "DISQUALIFIED",
-  );
+  const lockedStudents = studentsData.filter((s) => s.status === "LOCKED");
 
   // =================================================================================
   // RENDER UI DENAH / KELAS
@@ -1214,6 +1230,8 @@ const UjianDashboard = () => {
                               <CustomAvatar
                                 gender={assignedData.gender}
                                 isDisqualified={isDisqualified}
+                                fotoProfil={assignedData.fotoProfil}
+                                fotoPosisi={assignedData.fotoPosisi}
                               />
                             </motion.div>
                           )}
@@ -1225,6 +1243,8 @@ const UjianDashboard = () => {
                                 <CustomAvatar
                                   gender={assignedData.gender}
                                   isDisqualified={false}
+                                  fotoProfil={assignedData.fotoProfil}
+                                  fotoPosisi={assignedData.fotoPosisi}
                                 />
                               </div>
                             )}
